@@ -1549,8 +1549,9 @@ void LightweightVideoPlayer::switchStateGroup(int groupIndex)
     
     m_currentStateGroup = groupIndex;
     m_currentLoopStateIndex = -1;  // Reset loop tracking when switching groups
+    m_loopMode = LoopMode::NoLoop;  // Disable looping when switching groups
     
-    qDebug() << "LightweightVideoPlayer: Switched to state group" << (groupIndex + 1);
+    qDebug() << "LightweightVideoPlayer: Switched to state group" << (groupIndex + 1) << "- Looping disabled";
     showTemporaryMessage(tr("State Group %1").arg(groupIndex + 1));
 }
 
