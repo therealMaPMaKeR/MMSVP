@@ -39,7 +39,9 @@ public:
         StateGroup1,        // F1 (switch to state group 1)
         StateGroup2,        // F2 (switch to state group 2)
         StateGroup3,        // F3 (switch to state group 3)
-        StateGroup4         // F4 (switch to state group 4)
+        StateGroup4,        // F4 (switch to state group 4)
+        SaveStateGroup,     // Ctrl + F1-F4 (saves state group to file) - DISPLAY ONLY
+        DeleteStateGroup    // Alt + F1-F4 (deletes state group) - DISPLAY ONLY
     };
 
     explicit KeybindManager(QObject *parent = nullptr);

@@ -959,6 +959,48 @@ void LightweightVideoPlayer::keyPressEvent(QKeyEvent *event)
         }
     }
     
+    // Handle Ctrl+F1-F4 for saving state groups
+    if (modifiers == Qt::ControlModifier) {
+        if (key == Qt::Key_F1) {
+            saveStateGroup(0);
+            event->accept();
+            return;
+        } else if (key == Qt::Key_F2) {
+            saveStateGroup(1);
+            event->accept();
+            return;
+        } else if (key == Qt::Key_F3) {
+            saveStateGroup(2);
+            event->accept();
+            return;
+        } else if (key == Qt::Key_F4) {
+            saveStateGroup(3);
+            event->accept();
+            return;
+        }
+    }
+    
+    // Handle Alt+F1-F4 for deleting state groups
+    if (modifiers == Qt::AltModifier) {
+        if (key == Qt::Key_F1) {
+            deleteStateGroup(0);
+            event->accept();
+            return;
+        } else if (key == Qt::Key_F2) {
+            deleteStateGroup(1);
+            event->accept();
+            return;
+        } else if (key == Qt::Key_F3) {
+            deleteStateGroup(2);
+            event->accept();
+            return;
+        } else if (key == Qt::Key_F4) {
+            deleteStateGroup(3);
+            event->accept();
+            return;
+        }
+    }
+    
     // Create QKeySequence from the event
     QKeyCombination combination(modifiers, key);
     QKeySequence keySeq(combination);
@@ -1242,8 +1284,7 @@ void LightweightVideoPlayer::savePlaybackState(int stateIndex)
              << "in group" << (m_currentStateGroup + 1)
              << "- Start Position:" << currentPosition << "ms, Speed:" << currentSpeed << "x";
     
-    // Save to file
-    saveStatesToFile();
+    // Note: File saving is now manual via Ctrl+F1-F4
     
     showTemporaryMessage(tr("G%1 State %2 Saved").arg(m_currentStateGroup + 1).arg(stateIndex + 1));
 }
@@ -1322,8 +1363,7 @@ void LightweightVideoPlayer::setLoopEndPosition(int stateIndex)
              << "in group" << (m_currentStateGroup + 1)
              << "- End Position:" << currentPosition << "ms";
     
-    // Save to file
-    saveStatesToFile();
+    // Note: File saving is now manual via Ctrl+F1-F4
     
     showTemporaryMessage(tr("G%1 State %2 Loop End Set").arg(m_currentStateGroup + 1).arg(stateIndex + 1));
 }
@@ -1341,8 +1381,7 @@ void LightweightVideoPlayer::deletePlaybackState(int stateIndex)
     qDebug() << "LightweightVideoPlayer: Deleted state" << (stateIndex + 1)
              << "from group" << (m_currentStateGroup + 1);
     
-    // Save to file
-    saveStatesToFile();
+    // Note: File saving is now manual via Ctrl+F1-F4
     
     showTemporaryMessage(tr("G%1 State %2 Deleted").arg(m_currentStateGroup + 1).arg(stateIndex + 1));
 }
@@ -1711,7 +1750,7 @@ QString LightweightVideoPlayer::getStatesFilePath(int groupIndex) const
     }
     
     QFileInfo fileInfo(m_currentVideoPath);
-    QString basePath = fileInfo.absolutePath() + "/" + fileInfo.completeBaseName();
+    QString basePath = fileInfo.absolutePath() + "/0state_" + fileInfo.completeBaseName();
     
     return basePath + QString(".statesG%1").arg(groupIndex + 1);
 }
@@ -1728,6 +1767,96 @@ int LightweightVideoPlayer::findFirstValidLoop() const
     
     // No valid loop found
     return -1;
+}
+
+void LightweightVideoPlayer::saveStateGroup(int groupIndex)
+{
+    if (groupIndex < 0 || groupIndex >= 4) {
+        qDebug() << "LightweightVideoPlayer: Invalid state group index" << groupIndex;
+        return;
+    }
+    
+    if (m_currentVideoPath.isEmpty()) {
+        qDebug() << "LightweightVideoPlayer: No video loaded, cannot save state group";
+        return;
+    }
+    
+    // Save the specified group to file
+    QString filePath = getStatesFilePath(groupIndex);
+    QFile file(filePath);
+    
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qDebug() << "LightweightVideoPlayer: Failed to open states file for writing:" << filePath;
+        showTemporaryMessage(tr("Failed to save Group %1").arg(groupIndex + 1));
+        return;
+    }
+    
+    QTextStream out(&file);
+    out.setEncoding(QStringConverter::Utf8);
+    
+    // Write header
+    out << "# Video Player State Group File v1.0\n";
+    out << "# Format: StateIndex,StartPos,EndPos,Speed,Valid,HasEnd\n";
+    out << "\n";
+    
+    // Write each state for this group
+    for (int i = 0; i < 12; i++) {
+        const PlaybackState& state = m_playbackStates[groupIndex][i];
+        
+        out << i << ","
+            << state.startPosition << ","
+            << state.endPosition << ","
+            << state.playbackSpeed << ","
+            << (state.isValid ? "1" : "0") << ","
+            << (state.hasEndPosition ? "1" : "0") << "\n";
+    }
+    
+    file.close();
+    qDebug() << "LightweightVideoPlayer: Saved state group" << (groupIndex + 1) << "to" << filePath;
+    showTemporaryMessage(tr("Group %1 Saved").arg(groupIndex + 1));
+}
+
+void LightweightVideoPlayer::deleteStateGroup(int groupIndex)
+{
+    if (groupIndex < 0 || groupIndex >= 4) {
+        qDebug() << "LightweightVideoPlayer: Invalid state group index" << groupIndex;
+        return;
+    }
+    
+    // Show confirmation dialog
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this,
+        tr("Delete State Group"),
+        tr("Are you sure you want to delete all states in Group %1?").arg(groupIndex + 1),
+        QMessageBox::Yes | QMessageBox::No
+    );
+    
+    if (reply != QMessageBox::Yes) {
+        qDebug() << "LightweightVideoPlayer: User cancelled deletion of group" << (groupIndex + 1);
+        return;
+    }
+    
+    // Clear all states in memory for this group
+    for (int i = 0; i < 12; i++) {
+        m_playbackStates[groupIndex][i] = PlaybackState();
+    }
+    
+    // Delete the file from disk if it exists
+    if (!m_currentVideoPath.isEmpty()) {
+        QString filePath = getStatesFilePath(groupIndex);
+        QFile file(filePath);
+        
+        if (file.exists()) {
+            if (file.remove()) {
+                qDebug() << "LightweightVideoPlayer: Deleted state group file:" << filePath;
+            } else {
+                qDebug() << "LightweightVideoPlayer: Failed to delete state group file:" << filePath;
+            }
+        }
+    }
+    
+    qDebug() << "LightweightVideoPlayer: Deleted state group" << (groupIndex + 1);
+    showTemporaryMessage(tr("Group %1 Deleted").arg(groupIndex + 1));
 }
 
 // TemporaryMessageLabel implementation

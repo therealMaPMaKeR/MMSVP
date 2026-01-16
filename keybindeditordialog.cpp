@@ -172,7 +172,9 @@ void KeybindEditorDialog::populateTable()
         KeybindManager::Action::StateGroup1,
         KeybindManager::Action::StateGroup2,
         KeybindManager::Action::StateGroup3,
-        KeybindManager::Action::StateGroup4
+        KeybindManager::Action::StateGroup4,
+        KeybindManager::Action::SaveStateGroup,
+        KeybindManager::Action::DeleteStateGroup
     };
     
     m_tableWidget->setRowCount(actions.size());
@@ -723,10 +725,12 @@ void KeybindEditorDialog::onResetToDefaultsClicked()
             KeybindManager::Action::CycleLoopMode,
             KeybindManager::Action::ReturnToLastPosition,
                 KeybindManager::Action::StateGroup1,
-                KeybindManager::Action::StateGroup2,
-                KeybindManager::Action::StateGroup3,
-            KeybindManager::Action::StateGroup4
-            };
+            KeybindManager::Action::StateGroup2,
+            KeybindManager::Action::StateGroup3,
+            KeybindManager::Action::StateGroup4,
+            KeybindManager::Action::SaveStateGroup,
+            KeybindManager::Action::DeleteStateGroup
+        };
     
     for (KeybindManager::Action action : actions) {
         m_tempKeybinds[action] = KeybindManager::getDefaultKeybinds(action);

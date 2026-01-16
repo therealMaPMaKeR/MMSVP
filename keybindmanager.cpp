@@ -177,6 +177,10 @@ QString KeybindManager::actionToString(Action action)
             return "State Group 3";
         case Action::StateGroup4:
             return "State Group 4";
+        case Action::SaveStateGroup:
+            return "Save State Group (Ctrl+F1-F4)";
+        case Action::DeleteStateGroup:
+            return "Delete State Group (Alt+F1-F4)";
         default:
             return "Unknown";
     }
@@ -184,10 +188,12 @@ QString KeybindManager::actionToString(Action action)
 
 bool KeybindManager::isActionEditable(Action action)
 {
-    // SaveState, SetLoopEnd, and DeleteState are display-only
+    // SaveState, SetLoopEnd, DeleteState, SaveStateGroup, and DeleteStateGroup are display-only
     return action != Action::SaveState &&
            action != Action::SetLoopEnd &&
-           action != Action::DeleteState;
+           action != Action::DeleteState &&
+           action != Action::SaveStateGroup &&
+           action != Action::DeleteStateGroup;
 }
 
 QList<QKeySequence> KeybindManager::getDefaultKeybinds(Action action)
@@ -264,6 +270,12 @@ QList<QKeySequence> KeybindManager::getDefaultKeybinds(Action action)
         case Action::StateGroup4:
             defaults << QKeySequence(Qt::Key_F4);
             break;
+        case Action::SaveStateGroup:
+            defaults << QKeySequence(Qt::CTRL | Qt::Key_F1);  // Example, user uses Ctrl+F1-F4
+            break;
+        case Action::DeleteStateGroup:
+            defaults << QKeySequence(Qt::ALT | Qt::Key_F1);   // Example, user uses Alt+F1-F4
+            break;
     }
     
     return defaults;
@@ -295,6 +307,8 @@ void KeybindManager::resetToDefaults()
     m_keybinds[Action::StateGroup2] = getDefaultKeybinds(Action::StateGroup2);
     m_keybinds[Action::StateGroup3] = getDefaultKeybinds(Action::StateGroup3);
     m_keybinds[Action::StateGroup4] = getDefaultKeybinds(Action::StateGroup4);
+    m_keybinds[Action::SaveStateGroup] = getDefaultKeybinds(Action::SaveStateGroup);
+    m_keybinds[Action::DeleteStateGroup] = getDefaultKeybinds(Action::DeleteStateGroup);
     
     emit keybindsChanged();
 }
@@ -335,7 +349,9 @@ bool KeybindManager::saveKeybinds()
         Action::ToggleLoadSpeed,
         Action::CycleLoopMode,
         Action::ReturnToLastPosition,
-        Action::StateKeys
+        Action::StateKeys,
+        Action::SaveStateGroup,
+        Action::DeleteStateGroup
     };
     
     for (Action action : actions) {
@@ -393,6 +409,8 @@ bool KeybindManager::loadKeybinds()
     actionMap["StateGroup2"] = Action::StateGroup2;
     actionMap["StateGroup3"] = Action::StateGroup3;
     actionMap["StateGroup4"] = Action::StateGroup4;
+    actionMap["SaveStateGroup(Ctrl+F1-F4)"] = Action::SaveStateGroup;
+    actionMap["DeleteStateGroup(Alt+F1-F4)"] = Action::DeleteStateGroup;
     
     int lineNumber = 0;
     while (!in.atEnd()) {
@@ -447,7 +465,7 @@ bool KeybindManager::loadKeybinds()
     file.close();
     
     // Verify that all actions have been loaded
-    if (m_keybinds.size() != 19) {
+    if (m_keybinds.size() != 21) {
         qWarning() << "KeybindManager: Not all actions were loaded from file";
         return false;
     }

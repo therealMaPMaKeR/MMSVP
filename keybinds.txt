@@ -22,3 +22,5 @@ StateGroup1=F1
 StateGroup2=F2
 StateGroup3=F3
 StateGroup4=F4
+SaveStateGroup(Ctrl+F1-F4)=Ctrl+F1
+DeleteStateGroup(Alt+F1-F4)=Alt+F1

@@ -206,6 +206,8 @@ private:
     void loadStatesFromFile();
     QString getStatesFilePath(int groupIndex) const;
     int findFirstValidLoop() const;
+    void saveStateGroup(int groupIndex);
+    void deleteStateGroup(int groupIndex);
 };
 
 // Temporary message label overlay
