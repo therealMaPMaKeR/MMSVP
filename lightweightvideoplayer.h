@@ -58,6 +58,25 @@ public:
     int volume() const;
     qreal playbackSpeed() const;
     QString currentVideoPath() const;
+    
+    // Playback state system (public for StatesEditorDialog)
+    struct PlaybackState {
+        qint64 startPosition;
+        qint64 endPosition;
+        qreal playbackSpeed;
+        bool isValid;
+        bool hasEndPosition;
+        
+        PlaybackState() : startPosition(0), endPosition(0), playbackSpeed(1.0), isValid(false), hasEndPosition(false) {}
+        PlaybackState(qint64 start, qreal speed) : startPosition(start), endPosition(0), playbackSpeed(speed), isValid(true), hasEndPosition(false) {}
+    };
+    
+    // Getters for states editor
+    int currentStateGroup() const { return m_currentStateGroup; }
+    const PlaybackState& getPlaybackState(int group, int stateIndex) const;
+    void setPlaybackState(int group, int stateIndex, const PlaybackState& state);
+    void copyAllStates(PlaybackState dest[4][12]) const;
+    void applyAllStates(const PlaybackState src[4][12]);
 
 signals:
     void errorOccurred(const QString& error);
@@ -124,6 +143,7 @@ protected:
     QPointer<QPushButton> m_stopButton;
     QPointer<QPushButton> m_fullScreenButton;
     QPointer<QPushButton> m_keybindsButton;
+    QPointer<QPushButton> m_editStatesButton;
     QPointer<QSlider> m_positionSlider;
     QPointer<QSlider> m_volumeSlider;
     QPointer<QDoubleSpinBox> m_speedSpinBox;
@@ -165,18 +185,6 @@ protected:
         LoopAll
     };
     
-    // Playback state system
-    struct PlaybackState {
-        qint64 startPosition;
-        qint64 endPosition;
-        qreal playbackSpeed;
-        bool isValid;
-        bool hasEndPosition;
-        
-        PlaybackState() : startPosition(0), endPosition(0), playbackSpeed(1.0), isValid(false), hasEndPosition(false) {}
-        PlaybackState(qint64 start, qreal speed) : startPosition(start), endPosition(0), playbackSpeed(speed), isValid(true), hasEndPosition(false) {}
-    };
-    
     PlaybackState m_playbackStates[4][12];  // 4 groups x 12 states for keys 1,2,3,4,5,6,7,8,9,0,-,=
     int m_currentStateGroup;  // Current active state group (0-3)
     LoopMode m_loopMode;
@@ -187,6 +195,7 @@ protected:
 private:
     void initializePlayer();
     void openKeybindEditor();
+    void openStatesEditor();
     void savePlaybackState(int stateIndex);
     void setLoopEndPosition(int stateIndex);
     void loadPlaybackState(int stateIndex);

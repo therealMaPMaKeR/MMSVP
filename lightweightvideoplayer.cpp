@@ -1,5 +1,6 @@
 #include "lightweightvideoplayer.h"
 #include "keybindeditordialog.h"
+#include "stateseditordialog.h"
 #include <QGuiApplication>
 #include <QDebug>
 #include <QFileInfo>
@@ -99,6 +100,7 @@ LightweightVideoPlayer::LightweightVideoPlayer(QWidget *parent, int initialVolum
     , m_stopButton(nullptr)
     , m_fullScreenButton(nullptr)
     , m_keybindsButton(nullptr)
+    , m_editStatesButton(nullptr)
     , m_positionSlider(nullptr)
     , m_volumeSlider(nullptr)
     , m_speedSpinBox(nullptr)
@@ -275,6 +277,11 @@ void LightweightVideoPlayer::createControls()
     m_keybindsButton->setToolTip(tr("Edit Keybinds"));
     m_keybindsButton->setFocusPolicy(Qt::NoFocus);
     
+    // Edit States button
+    m_editStatesButton = new QPushButton(tr("Edit States"), this);
+    m_editStatesButton->setToolTip(tr("Edit Playback States"));
+    m_editStatesButton->setFocusPolicy(Qt::NoFocus);
+    
     // Position slider
     m_positionSlider = createClickableSlider();
     m_positionSlider->setRange(0, 0);
@@ -321,6 +328,7 @@ void LightweightVideoPlayer::createLayouts()
     m_controlLayout->addWidget(m_stopButton);
     m_controlLayout->addWidget(m_fullScreenButton);
     m_controlLayout->addWidget(m_keybindsButton);
+    m_controlLayout->addWidget(m_editStatesButton);
     m_controlLayout->addStretch();
     
     // Slider layout (position, volume, and speed)
@@ -379,6 +387,11 @@ void LightweightVideoPlayer::connectSignals()
     if (m_keybindsButton) {
         connect(m_keybindsButton, &QPushButton::clicked,
                 this, &LightweightVideoPlayer::openKeybindEditor);
+    }
+    
+    if (m_editStatesButton) {
+        connect(m_editStatesButton, &QPushButton::clicked,
+                this, &LightweightVideoPlayer::openStatesEditor);
     }
     
     // Slider signals
@@ -1233,6 +1246,59 @@ void LightweightVideoPlayer::openKeybindEditor()
     
     KeybindEditorDialog dialog(m_keybindManager.get(), this);
     dialog.exec();
+}
+
+void LightweightVideoPlayer::openStatesEditor()
+{
+    qDebug() << "LightweightVideoPlayer: Opening states editor";
+    
+    if (m_currentVideoPath.isEmpty()) {
+        QMessageBox::warning(this, tr("No Video Loaded"),
+                           tr("Please load a video before editing states."));
+        return;
+    }
+    
+    StatesEditorDialog dialog(this, this);
+    dialog.exec();
+}
+
+// State access methods for StatesEditorDialog
+const LightweightVideoPlayer::PlaybackState& LightweightVideoPlayer::getPlaybackState(int group, int stateIndex) const
+{
+    static PlaybackState emptyState;
+    
+    if (group < 0 || group >= 4 || stateIndex < 0 || stateIndex >= 12) {
+        return emptyState;
+    }
+    
+    return m_playbackStates[group][stateIndex];
+}
+
+void LightweightVideoPlayer::setPlaybackState(int group, int stateIndex, const PlaybackState& state)
+{
+    if (group < 0 || group >= 4 || stateIndex < 0 || stateIndex >= 12) {
+        return;
+    }
+    
+    m_playbackStates[group][stateIndex] = state;
+}
+
+void LightweightVideoPlayer::copyAllStates(PlaybackState dest[4][12]) const
+{
+    for (int g = 0; g < 4; g++) {
+        for (int s = 0; s < 12; s++) {
+            dest[g][s] = m_playbackStates[g][s];
+        }
+    }
+}
+
+void LightweightVideoPlayer::applyAllStates(const PlaybackState src[4][12])
+{
+    for (int g = 0; g < 4; g++) {
+        for (int s = 0; s < 12; s++) {
+            m_playbackStates[g][s] = src[g][s];
+        }
+    }
 }
 
 // Helper methods

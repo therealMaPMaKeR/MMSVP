@@ -11,13 +11,15 @@ SOURCES += \
     vp_vlcplayer.cpp \
     lightweightvideoplayer.cpp \
     keybindmanager.cpp \
-    keybindeditordialog.cpp
+    keybindeditordialog.cpp \
+    stateseditordialog.cpp
 
 HEADERS += \
     vp_vlcplayer.h \
     lightweightvideoplayer.h \
     keybindmanager.h \
-    keybindeditordialog.h
+    keybindeditordialog.h \
+    stateseditordialog.h
 
 # LibVLC configuration for Windows
 win32 {
