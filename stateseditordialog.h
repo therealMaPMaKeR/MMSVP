@@ -38,7 +38,6 @@ private slots:
     void onStateItemRightClicked(const QPoint& pos);
     void onSaveClicked();
     void onCancelClicked();
-    void onApplyClicked();
 
 private:
     void setupUI();
@@ -61,7 +60,6 @@ private:
     QListWidget* m_stateLists[4];  // One list per group
     QPushButton* m_saveButton;
     QPushButton* m_cancelButton;
-    QPushButton* m_applyButton;
     QLabel* m_instructionLabel;
     
     // Forward declare the PlaybackState type from LightweightVideoPlayer

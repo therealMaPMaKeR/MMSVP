@@ -13,6 +13,8 @@
 #include <QScreen>
 #include <QCursor>
 #include <QBuffer>
+#include <QEventLoop>
+#include <QTimer>
 
 // Custom clickable slider class for seeking in video
 class LightweightVideoPlayer::ClickableSlider : public QSlider
@@ -1347,8 +1349,23 @@ void LightweightVideoPlayer::savePlaybackState(int stateIndex)
     qint64 currentPosition = m_mediaPlayer->position();
     qreal currentSpeed = m_mediaPlayer->playbackRate();
     
+    // Pause video if playing to ensure clean frame capture
+    bool wasPlaying = m_mediaPlayer->isPlaying();
+    if (wasPlaying) {
+        m_mediaPlayer->pause();
+        // Wait for VLC to settle before capturing
+        QEventLoop loop;
+        QTimer timer;
+        timer.setSingleShot(true);
+        QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+        timer.start(200);  // 200ms wait
+        loop.exec();
+    }
+    
     // Capture preview image at current position
     QPixmap preview = m_mediaPlayer->captureFrameAtPosition(currentPosition);
+    
+    // Don't resume playback - let it stay paused
     
     // Save the state with start position and clear any existing end position
     m_playbackStates[m_currentStateGroup][stateIndex].startPosition = currentPosition;

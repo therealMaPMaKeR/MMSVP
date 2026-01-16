@@ -81,6 +81,10 @@ public:
     
     // Frame capture for preview images
     QPixmap captureFrameAtPosition(qint64 position);
+    
+    // State group management (public for StatesEditorDialog)
+    void switchStateGroup(int groupIndex);
+    void saveStateGroup(int groupIndex);
 
 signals:
     void errorOccurred(const QString& error);
@@ -213,13 +217,11 @@ private:
     QString getLoopModeString() const;
     void showTemporaryMessage(const QString& message);
     
-    // State group management
-    void switchStateGroup(int groupIndex);
+    // State group management (private methods)
     void saveStatesToFile();
     void loadStatesFromFile();
     QString getStatesFilePath(int groupIndex) const;
     int findFirstValidLoop() const;
-    void saveStateGroup(int groupIndex);
     void deleteStateGroup(int groupIndex);
 };
 

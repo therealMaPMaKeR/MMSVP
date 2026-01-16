@@ -7,6 +7,8 @@
 #include <QTime>
 #include <QPainter>
 #include <QDebug>
+#include <QEventLoop>
+#include <QTimer>
 
 // StatesEditorDialog implementation
 StatesEditorDialog::StatesEditorDialog(LightweightVideoPlayer* player, QWidget *parent)
@@ -15,7 +17,6 @@ StatesEditorDialog::StatesEditorDialog(LightweightVideoPlayer* player, QWidget *
     , m_tabWidget(nullptr)
     , m_saveButton(nullptr)
     , m_cancelButton(nullptr)
-    , m_applyButton(nullptr)
     , m_instructionLabel(nullptr)
     , m_currentGroup(0)
     , m_initialGroup(0)
@@ -46,7 +47,7 @@ void StatesEditorDialog::setupUI()
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     
     // Instruction label
-    m_instructionLabel = new QLabel(tr("Double-click a state to edit. Right-click to delete. Changes are saved when you click Save or Apply."), this);
+    m_instructionLabel = new QLabel(tr("Double-click a state to edit. Right-click for options. Save button saves the current group to file."), this);
     m_instructionLabel->setWordWrap(true);
     m_instructionLabel->setStyleSheet("QLabel { color: #555; font-style: italic; margin-bottom: 10px; }");
     mainLayout->addWidget(m_instructionLabel);
@@ -84,19 +85,14 @@ void StatesEditorDialog::setupUI()
     
     buttonLayout->addStretch();
     
-    m_applyButton = new QPushButton(tr("Apply"), this);
-    m_applyButton->setToolTip(tr("Apply changes without closing"));
-    connect(m_applyButton, &QPushButton::clicked, this, &StatesEditorDialog::onApplyClicked);
-    buttonLayout->addWidget(m_applyButton);
-    
-    m_saveButton = new QPushButton(tr("Save"), this);
-    m_saveButton->setDefault(true);
-    m_saveButton->setToolTip(tr("Save changes and close"));
+    m_saveButton = new QPushButton(tr("Save Group to File"), this);
+    m_saveButton->setToolTip(tr("Save current group to file (like Ctrl+F1-F4)"));
     connect(m_saveButton, &QPushButton::clicked, this, &StatesEditorDialog::onSaveClicked);
     buttonLayout->addWidget(m_saveButton);
     
-    m_cancelButton = new QPushButton(tr("Cancel"), this);
-    m_cancelButton->setToolTip(tr("Discard changes and close"));
+    m_cancelButton = new QPushButton(tr("Close"), this);
+    m_cancelButton->setDefault(true);
+    m_cancelButton->setToolTip(tr("Close dialog"));
     connect(m_cancelButton, &QPushButton::clicked, this, &StatesEditorDialog::onCancelClicked);
     buttonLayout->addWidget(m_cancelButton);
     
@@ -181,36 +177,43 @@ void StatesEditorDialog::onTabChanged(int index)
 {
     qDebug() << "StatesEditorDialog: Tab changed to" << (index + 1);
     
-    // Check if current group has unsaved changes
-    if (checkUnsavedChanges(m_currentGroup)) {
-        // User wants to save or was cancelled
-        // If cancelled, revert to previous tab
-        if (m_groupHasChanges[m_currentGroup]) {
-            QMessageBox::StandardButton reply = QMessageBox::question(
-                this,
-                tr("Unsaved Changes"),
-                tr("Group %1 has unsaved changes. Do you want to apply them before switching?")
-                    .arg(m_currentGroup + 1),
-                QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel
-            );
-            
-            if (reply == QMessageBox::Cancel) {
-                // Block the tab change
-                m_tabWidget->blockSignals(true);
-                m_tabWidget->setCurrentIndex(m_currentGroup);
-                m_tabWidget->blockSignals(false);
-                return;
-            } else if (reply == QMessageBox::Yes) {
-                // Apply changes for current group
-                m_groupHasChanges[m_currentGroup] = false;
-            } else {
-                // Discard changes - reload from player
-                // (We'll implement this when we add the getter method)
-            }
-        }
+    if (!m_player) {
+        return;
     }
     
+    // Apply changes to current group before switching
+    if (m_groupHasChanges[m_currentGroup]) {
+        // Save changes to player memory for this group
+        for (int s = 0; s < 12; s++) {
+            LightweightVideoPlayer::PlaybackState playerState;
+            playerState.startPosition = m_tempStates[m_currentGroup][s].startPosition;
+            playerState.endPosition = m_tempStates[m_currentGroup][s].endPosition;
+            playerState.playbackSpeed = m_tempStates[m_currentGroup][s].playbackSpeed;
+            playerState.isValid = m_tempStates[m_currentGroup][s].isValid;
+            playerState.hasEndPosition = m_tempStates[m_currentGroup][s].hasEndPosition;
+            playerState.previewImage = m_tempStates[m_currentGroup][s].previewImage;
+            
+            m_player->setPlaybackState(m_currentGroup, s, playerState);
+        }
+        m_groupHasChanges[m_currentGroup] = false;
+    }
+    
+    // Switch to the new group in the player (simulates pressing F1-F4)
+    m_player->switchStateGroup(index);
+    
     m_currentGroup = index;
+    
+    // Reload states from player for the new group
+    for (int s = 0; s < 12; s++) {
+        const auto& playerState = m_player->getPlaybackState(index, s);
+        m_tempStates[index][s].startPosition = playerState.startPosition;
+        m_tempStates[index][s].endPosition = playerState.endPosition;
+        m_tempStates[index][s].playbackSpeed = playerState.playbackSpeed;
+        m_tempStates[index][s].isValid = playerState.isValid;
+        m_tempStates[index][s].hasEndPosition = playerState.hasEndPosition;
+        m_tempStates[index][s].previewImage = playerState.previewImage;
+    }
+    
     populateStateList(index);
 }
 
@@ -375,8 +378,26 @@ void StatesEditorDialog::refreshPreview(int groupIndex, int stateIndex)
     qDebug() << "StatesEditorDialog: Refreshing preview for state" << (stateIndex + 1)
              << "in group" << (groupIndex + 1);
     
+    // Pause playback temporarily for preview capture
+    bool wasPlaying = m_player->isPlaying();
+    if (wasPlaying) {
+        m_player->pause();
+        // Wait a bit for VLC to settle
+        QEventLoop loop;
+        QTimer timer;
+        timer.setSingleShot(true);
+        QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+        timer.start(150);
+        loop.exec();
+    }
+    
     // Capture new preview at the state's start position
     QPixmap newPreview = m_player->captureFrameAtPosition(state.startPosition);
+    
+    // Resume playback if it was playing
+    if (wasPlaying) {
+        m_player->play();
+    }
     
     if (!newPreview.isNull()) {
         state.previewImage = newPreview;
@@ -435,47 +456,54 @@ void StatesEditorDialog::onSaveClicked()
 {
     qDebug() << "StatesEditorDialog: Save clicked";
     
-    saveChangesToPlayer();
-    accept();
+    if (!m_player) {
+        QMessageBox::warning(this, tr("Error"), tr("No player reference."));
+        return;
+    }
+    
+    // Apply current group's changes to player memory first
+    if (m_groupHasChanges[m_currentGroup]) {
+        for (int s = 0; s < 12; s++) {
+            LightweightVideoPlayer::PlaybackState playerState;
+            playerState.startPosition = m_tempStates[m_currentGroup][s].startPosition;
+            playerState.endPosition = m_tempStates[m_currentGroup][s].endPosition;
+            playerState.playbackSpeed = m_tempStates[m_currentGroup][s].playbackSpeed;
+            playerState.isValid = m_tempStates[m_currentGroup][s].isValid;
+            playerState.hasEndPosition = m_tempStates[m_currentGroup][s].hasEndPosition;
+            playerState.previewImage = m_tempStates[m_currentGroup][s].previewImage;
+            
+            m_player->setPlaybackState(m_currentGroup, s, playerState);
+        }
+        m_groupHasChanges[m_currentGroup] = false;
+    }
+    
+    // Save current group to file (like Ctrl+F1-F4)
+    m_player->saveStateGroup(m_currentGroup);
+    
+    QMessageBox::information(this, tr("Saved"), 
+                           tr("Group %1 has been saved to file.").arg(m_currentGroup + 1));
 }
 
 void StatesEditorDialog::onCancelClicked()
 {
-    qDebug() << "StatesEditorDialog: Cancel clicked";
+    qDebug() << "StatesEditorDialog: Close clicked";
     
-    // Check if any group has unsaved changes
-    bool hasAnyChanges = false;
-    for (int i = 0; i < 4; i++) {
-        if (m_groupHasChanges[i]) {
-            hasAnyChanges = true;
-            break;
+    // Apply any pending changes to player memory before closing
+    if (m_player && m_groupHasChanges[m_currentGroup]) {
+        for (int s = 0; s < 12; s++) {
+            LightweightVideoPlayer::PlaybackState playerState;
+            playerState.startPosition = m_tempStates[m_currentGroup][s].startPosition;
+            playerState.endPosition = m_tempStates[m_currentGroup][s].endPosition;
+            playerState.playbackSpeed = m_tempStates[m_currentGroup][s].playbackSpeed;
+            playerState.isValid = m_tempStates[m_currentGroup][s].isValid;
+            playerState.hasEndPosition = m_tempStates[m_currentGroup][s].hasEndPosition;
+            playerState.previewImage = m_tempStates[m_currentGroup][s].previewImage;
+            
+            m_player->setPlaybackState(m_currentGroup, s, playerState);
         }
     }
     
-    if (hasAnyChanges) {
-        QMessageBox::StandardButton reply = QMessageBox::question(
-            this,
-            tr("Unsaved Changes"),
-            tr("You have unsaved changes. Are you sure you want to discard them?"),
-            QMessageBox::Yes | QMessageBox::No
-        );
-        
-        if (reply == QMessageBox::No) {
-            return;
-        }
-    }
-    
-    reject();
-}
-
-void StatesEditorDialog::onApplyClicked()
-{
-    qDebug() << "StatesEditorDialog: Apply clicked";
-    
-    saveChangesToPlayer();
-    
-    QMessageBox::information(this, tr("Changes Applied"), 
-                           tr("All changes have been applied to the player."));
+    accept();
 }
 
 QString StatesEditorDialog::formatTime(qint64 milliseconds) const
