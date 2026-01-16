@@ -26,7 +26,25 @@ public:
         SeekForward,
         SeekBackward,
         VolumeUp,
-        VolumeDown
+        VolumeDown,
+        SpeedUp,
+        SpeedDown,
+        SaveState1,
+        SaveState2,
+        SaveState3,
+        SaveState4,
+        SaveState5,
+        SaveState6,
+        SaveState7,
+        SaveState8,
+        LoadState1,
+        LoadState2,
+        LoadState3,
+        LoadState4,
+        LoadState5,
+        LoadState6,
+        LoadState7,
+        LoadState8
     };
 
     explicit KeybindManager(QObject *parent = nullptr);

@@ -919,7 +919,25 @@ void LightweightVideoPlayer::keyPressEvent(QKeyEvent *event)
             KeybindManager::Action::SeekForward,
             KeybindManager::Action::SeekBackward,
             KeybindManager::Action::VolumeUp,
-            KeybindManager::Action::VolumeDown
+            KeybindManager::Action::VolumeDown,
+            KeybindManager::Action::SpeedUp,
+            KeybindManager::Action::SpeedDown,
+            KeybindManager::Action::SaveState1,
+            KeybindManager::Action::SaveState2,
+            KeybindManager::Action::SaveState3,
+            KeybindManager::Action::SaveState4,
+            KeybindManager::Action::SaveState5,
+            KeybindManager::Action::SaveState6,
+            KeybindManager::Action::SaveState7,
+            KeybindManager::Action::SaveState8,
+            KeybindManager::Action::LoadState1,
+            KeybindManager::Action::LoadState2,
+            KeybindManager::Action::LoadState3,
+            KeybindManager::Action::LoadState4,
+            KeybindManager::Action::LoadState5,
+            KeybindManager::Action::LoadState6,
+            KeybindManager::Action::LoadState7,
+            KeybindManager::Action::LoadState8
         };
         
         for (const auto& action : actions) {
@@ -961,6 +979,96 @@ void LightweightVideoPlayer::keyPressEvent(QKeyEvent *event)
                         
                     case KeybindManager::Action::VolumeDown:
                         setVolume(volume() - 5);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::SpeedUp:
+                        setPlaybackSpeed(playbackSpeed() + 0.1);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::SpeedDown:
+                        setPlaybackSpeed(playbackSpeed() - 0.1);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::SaveState1:
+                        savePlaybackState(0);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::SaveState2:
+                        savePlaybackState(1);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::SaveState3:
+                        savePlaybackState(2);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::SaveState4:
+                        savePlaybackState(3);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::SaveState5:
+                        savePlaybackState(4);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::SaveState6:
+                        savePlaybackState(5);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::SaveState7:
+                        savePlaybackState(6);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::SaveState8:
+                        savePlaybackState(7);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::LoadState1:
+                        loadPlaybackState(0);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::LoadState2:
+                        loadPlaybackState(1);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::LoadState3:
+                        loadPlaybackState(2);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::LoadState4:
+                        loadPlaybackState(3);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::LoadState5:
+                        loadPlaybackState(4);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::LoadState6:
+                        loadPlaybackState(5);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::LoadState7:
+                        loadPlaybackState(6);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::LoadState8:
+                        loadPlaybackState(7);
                         handled = true;
                         break;
                 }
@@ -1067,4 +1175,51 @@ QString LightweightVideoPlayer::formatTime(qint64 milliseconds) const
             .arg(minutes, 2, 10, QChar('0'))
             .arg(seconds, 2, 10, QChar('0'));
     }
+}
+
+void LightweightVideoPlayer::savePlaybackState(int stateIndex)
+{
+    if (stateIndex < 0 || stateIndex >= 8) {
+        qDebug() << "LightweightVideoPlayer: Invalid state index" << stateIndex;
+        return;
+    }
+    
+    if (!m_mediaPlayer || !m_mediaPlayer->hasMedia()) {
+        qDebug() << "LightweightVideoPlayer: No media loaded, cannot save state";
+        return;
+    }
+    
+    qint64 currentPosition = m_mediaPlayer->position();
+    qreal currentSpeed = m_mediaPlayer->playbackRate();
+    
+    m_playbackStates[stateIndex] = PlaybackState(currentPosition, currentSpeed);
+    
+    qDebug() << "LightweightVideoPlayer: Saved state" << (stateIndex + 1) 
+             << "- Position:" << currentPosition << "ms, Speed:" << currentSpeed << "x";
+}
+
+void LightweightVideoPlayer::loadPlaybackState(int stateIndex)
+{
+    if (stateIndex < 0 || stateIndex >= 8) {
+        qDebug() << "LightweightVideoPlayer: Invalid state index" << stateIndex;
+        return;
+    }
+    
+    if (!m_playbackStates[stateIndex].isValid) {
+        qDebug() << "LightweightVideoPlayer: State" << (stateIndex + 1) << "does not exist, ignoring";
+        return;
+    }
+    
+    if (!m_mediaPlayer || !m_mediaPlayer->hasMedia()) {
+        qDebug() << "LightweightVideoPlayer: No media loaded, cannot load state";
+        return;
+    }
+    
+    const PlaybackState& state = m_playbackStates[stateIndex];
+    
+    setPosition(state.position);
+    setPlaybackSpeed(state.playbackSpeed);
+    
+    qDebug() << "LightweightVideoPlayer: Loaded state" << (stateIndex + 1) 
+             << "- Position:" << state.position << "ms, Speed:" << state.playbackSpeed << "x";
 }

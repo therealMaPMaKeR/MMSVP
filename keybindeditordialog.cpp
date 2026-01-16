@@ -155,7 +155,25 @@ void KeybindEditorDialog::populateTable()
         KeybindManager::Action::SeekForward,
         KeybindManager::Action::SeekBackward,
         KeybindManager::Action::VolumeUp,
-        KeybindManager::Action::VolumeDown
+        KeybindManager::Action::VolumeDown,
+        KeybindManager::Action::SpeedUp,
+        KeybindManager::Action::SpeedDown,
+        KeybindManager::Action::SaveState1,
+        KeybindManager::Action::SaveState2,
+        KeybindManager::Action::SaveState3,
+        KeybindManager::Action::SaveState4,
+        KeybindManager::Action::SaveState5,
+        KeybindManager::Action::SaveState6,
+        KeybindManager::Action::SaveState7,
+        KeybindManager::Action::SaveState8,
+        KeybindManager::Action::LoadState1,
+        KeybindManager::Action::LoadState2,
+        KeybindManager::Action::LoadState3,
+        KeybindManager::Action::LoadState4,
+        KeybindManager::Action::LoadState5,
+        KeybindManager::Action::LoadState6,
+        KeybindManager::Action::LoadState7,
+        KeybindManager::Action::LoadState8
     };
     
     m_tableWidget->setRowCount(actions.size());
@@ -429,7 +447,25 @@ void KeybindEditorDialog::onResetToDefaultsClicked()
             KeybindManager::Action::SeekForward,
             KeybindManager::Action::SeekBackward,
             KeybindManager::Action::VolumeUp,
-            KeybindManager::Action::VolumeDown
+            KeybindManager::Action::VolumeDown,
+            KeybindManager::Action::SpeedUp,
+            KeybindManager::Action::SpeedDown,
+            KeybindManager::Action::SaveState1,
+            KeybindManager::Action::SaveState2,
+            KeybindManager::Action::SaveState3,
+            KeybindManager::Action::SaveState4,
+            KeybindManager::Action::SaveState5,
+            KeybindManager::Action::SaveState6,
+            KeybindManager::Action::SaveState7,
+            KeybindManager::Action::SaveState8,
+            KeybindManager::Action::LoadState1,
+            KeybindManager::Action::LoadState2,
+            KeybindManager::Action::LoadState3,
+            KeybindManager::Action::LoadState4,
+            KeybindManager::Action::LoadState5,
+            KeybindManager::Action::LoadState6,
+            KeybindManager::Action::LoadState7,
+            KeybindManager::Action::LoadState8
         };
         
         for (KeybindManager::Action action : actions) {

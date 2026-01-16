@@ -152,9 +152,23 @@ protected:
     // Keybind manager
     std::unique_ptr<KeybindManager> m_keybindManager;
     
+    // Playback state system
+    struct PlaybackState {
+        qint64 position;
+        qreal playbackSpeed;
+        bool isValid;
+        
+        PlaybackState() : position(0), playbackSpeed(1.0), isValid(false) {}
+        PlaybackState(qint64 pos, qreal speed) : position(pos), playbackSpeed(speed), isValid(true) {}
+    };
+    
+    PlaybackState m_playbackStates[8];
+    
 private:
     void initializePlayer();
     void openKeybindEditor();
+    void savePlaybackState(int stateIndex);
+    void loadPlaybackState(int stateIndex);
 };
 
 #endif // LIGHTWEIGHTVIDEOPLAYER_H
