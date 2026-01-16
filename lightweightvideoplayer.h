@@ -177,7 +177,8 @@ protected:
         PlaybackState(qint64 start, qreal speed) : startPosition(start), endPosition(0), playbackSpeed(speed), isValid(true), hasEndPosition(false) {}
     };
     
-    PlaybackState m_playbackStates[12];  // 12 states for keys 1,2,3,4,5,6,7,8,9,0,-,=
+    PlaybackState m_playbackStates[4][12];  // 4 groups x 12 states for keys 1,2,3,4,5,6,7,8,9,0,-,=
+    int m_currentStateGroup;  // Current active state group (0-3)
     LoopMode m_loopMode;
     bool m_loadPlaybackSpeed;
     int m_currentLoopStateIndex;  // Track which state is currently looping
@@ -196,6 +197,12 @@ private:
     int getStateIndexFromKeySequence(const QKeySequence& keySeq) const;
     QString getLoopModeString() const;
     void showTemporaryMessage(const QString& message);
+    
+    // State group management
+    void switchStateGroup(int groupIndex);
+    void saveStatesToFile();
+    void loadStatesFromFile();
+    QString getStatesFilePath(int groupIndex) const;
 };
 
 // Temporary message label overlay

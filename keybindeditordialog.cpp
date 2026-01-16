@@ -167,7 +167,11 @@ void KeybindEditorDialog::populateTable()
         KeybindManager::Action::SetLoopEnd,
         KeybindManager::Action::DeleteState,
         KeybindManager::Action::ToggleLoadSpeed,
-        KeybindManager::Action::CycleLoopMode
+        KeybindManager::Action::CycleLoopMode,
+        KeybindManager::Action::StateGroup1,
+        KeybindManager::Action::StateGroup2,
+        KeybindManager::Action::StateGroup3,
+        KeybindManager::Action::StateGroup4
     };
     
     m_tableWidget->setRowCount(actions.size());
@@ -715,12 +719,16 @@ void KeybindEditorDialog::onResetToDefaultsClicked()
             KeybindManager::Action::SetLoopEnd,
             KeybindManager::Action::DeleteState,
             KeybindManager::Action::ToggleLoadSpeed,
-            KeybindManager::Action::CycleLoopMode
-        };
-        
-        for (KeybindManager::Action action : actions) {
-            m_tempKeybinds[action] = KeybindManager::getDefaultKeybinds(action);
-        }
+            KeybindManager::Action::CycleLoopMode,
+                KeybindManager::Action::StateGroup1,
+                KeybindManager::Action::StateGroup2,
+                KeybindManager::Action::StateGroup3,
+            KeybindManager::Action::StateGroup4
+            };
+    
+    for (KeybindManager::Action action : actions) {
+        m_tempKeybinds[action] = KeybindManager::getDefaultKeybinds(action);
+    }
         
         // Update display
         for (int i = 0; i < m_tableWidget->rowCount(); ++i) {

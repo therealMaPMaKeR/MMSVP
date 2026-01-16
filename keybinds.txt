@@ -17,3 +17,7 @@ SetLoopEnd(Alt+Num)=Alt+1
 DeleteState(Shift+Num)=Shift+1
 ToggleLoadSpeed=F5
 CycleLoopMode=F9
+StateGroup1=F1
+StateGroup2=F2
+StateGroup3=F3
+StateGroup4=F4

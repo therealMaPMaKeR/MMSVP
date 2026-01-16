@@ -34,7 +34,11 @@ public:
         DeleteState,        // Shift + number (deletes state) - DISPLAY ONLY
         ToggleLoadSpeed,    // F5 (toggles whether loading state changes speed)
         CycleLoopMode,      // F9 (cycles through loop modes)
-        StateKeys           // 12 customizable keys for states (1-9,0,-,=)
+        StateKeys,          // 12 customizable keys for states (1-9,0,-,=)
+        StateGroup1,        // F1 (switch to state group 1)
+        StateGroup2,        // F2 (switch to state group 2)
+        StateGroup3,        // F3 (switch to state group 3)
+        StateGroup4         // F4 (switch to state group 4)
     };
 
     explicit KeybindManager(QObject *parent = nullptr);
