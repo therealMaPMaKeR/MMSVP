@@ -1156,11 +1156,12 @@ void LightweightVideoPlayer::savePlaybackState(int stateIndex)
     qint64 currentPosition = m_mediaPlayer->position();
     qreal currentSpeed = m_mediaPlayer->playbackRate();
     
-    // Save the state with start position
+    // Save the state with start position and clear any existing end position
     m_playbackStates[stateIndex].startPosition = currentPosition;
     m_playbackStates[stateIndex].playbackSpeed = currentSpeed;
     m_playbackStates[stateIndex].isValid = true;
-    // Keep existing end position if any
+    m_playbackStates[stateIndex].endPosition = 0;
+    m_playbackStates[stateIndex].hasEndPosition = false;
     
     qDebug() << "LightweightVideoPlayer: Saved state" << (stateIndex + 1) 
              << "- Start Position:" << currentPosition << "ms, Speed:" << currentSpeed << "x";
@@ -1203,7 +1204,8 @@ void LightweightVideoPlayer::loadPlaybackState(int stateIndex)
         qDebug() << "  Speed:" << state.playbackSpeed << "x";
     }
     
-    showTemporaryMessage(tr("State %1 Loaded").arg(stateIndex + 1));
+    // No message shown when loading state
+    // showTemporaryMessage(tr("State %1 Loaded").arg(stateIndex + 1));
 }
 
 void LightweightVideoPlayer::setLoopEndPosition(int stateIndex)
