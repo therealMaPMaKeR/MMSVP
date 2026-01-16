@@ -1,0 +1,11 @@
+# Video Player Keybinds Configuration
+# Format: ActionName=Key1,Key2
+# Each action can have up to 2 keybinds separated by comma
+# Use modifier keys as combos: Ctrl+Key, Alt+Key, Shift+Key
+
+PlayPause=Space
+Stop=
+SeekForward=Right
+SeekBackward=Left
+VolumeUp=Up
+VolumeDown=Down

@@ -1,4 +1,5 @@
 #include "lightweightvideoplayer.h"
+#include "keybindeditordialog.h"
 #include <QGuiApplication>
 #include <QDebug>
 #include <QFileInfo>
@@ -7,6 +8,7 @@
 #include <QCloseEvent>
 #include <QApplication>
 #include <QDoubleSpinBox>
+#include <QMessageBox>
 #include <QScreen>
 #include <QCursor>
 #include <QScreen>
@@ -96,6 +98,7 @@ LightweightVideoPlayer::LightweightVideoPlayer(QWidget *parent, int initialVolum
     , m_playButton(nullptr)
     , m_stopButton(nullptr)
     , m_fullScreenButton(nullptr)
+    , m_keybindsButton(nullptr)
     , m_positionSlider(nullptr)
     , m_volumeSlider(nullptr)
     , m_speedSpinBox(nullptr)
@@ -163,6 +166,14 @@ LightweightVideoPlayer::~LightweightVideoPlayer()
 void LightweightVideoPlayer::initializePlayer()
 {
     qDebug() << "LightweightVideoPlayer: Initializing player";
+
+    // Initialize keybind manager
+    m_keybindManager = std::make_unique<KeybindManager>(this);
+    if (!m_keybindManager->initialize()) {
+        qDebug() << "LightweightVideoPlayer: Failed to initialize keybind manager";
+        QMessageBox::warning(this, tr("Warning"), 
+                           tr("Failed to initialize keybind system. Using defaults."));
+    }
 
     // Create VLC player instance
     m_mediaPlayer = std::make_unique<VP_VLCPlayer>(this);
@@ -248,6 +259,11 @@ void LightweightVideoPlayer::createControls()
     m_fullScreenButton->setToolTip(tr("Full Screen (F11)"));
     m_fullScreenButton->setFocusPolicy(Qt::NoFocus);
     
+    // Keybinds button
+    m_keybindsButton = new QPushButton(tr("Keybinds"), this);
+    m_keybindsButton->setToolTip(tr("Edit Keybinds"));
+    m_keybindsButton->setFocusPolicy(Qt::NoFocus);
+    
     // Position slider
     m_positionSlider = createClickableSlider();
     m_positionSlider->setRange(0, 0);
@@ -293,6 +309,7 @@ void LightweightVideoPlayer::createLayouts()
     m_controlLayout->addWidget(m_playButton);
     m_controlLayout->addWidget(m_stopButton);
     m_controlLayout->addWidget(m_fullScreenButton);
+    m_controlLayout->addWidget(m_keybindsButton);
     m_controlLayout->addStretch();
     
     // Slider layout (position, volume, and speed)
@@ -346,6 +363,11 @@ void LightweightVideoPlayer::connectSignals()
     if (m_fullScreenButton) {
         connect(m_fullScreenButton, &QPushButton::clicked,
                 this, &LightweightVideoPlayer::on_fullScreenButton_clicked);
+    }
+    
+    if (m_keybindsButton) {
+        connect(m_keybindsButton, &QPushButton::clicked,
+                this, &LightweightVideoPlayer::openKeybindEditor);
     }
     
     // Slider signals
@@ -863,57 +885,95 @@ void LightweightVideoPlayer::closeEvent(QCloseEvent *event)
 
 void LightweightVideoPlayer::keyPressEvent(QKeyEvent *event)
 {
-    qDebug() << "LightweightVideoPlayer: Key press event - Key:" << event->key();
+    // Special keys that are not bindable
+    if (event->key() == Qt::Key_F11) {
+        toggleFullScreen();
+        event->accept();
+        return;
+    }
     
-    switch (event->key()) {
-        case Qt::Key_Space:
-            on_playButton_clicked();
+    if (event->key() == Qt::Key_Escape) {
+        if (m_isFullScreen) {
+            exitFullScreen();
             event->accept();
-            break;
-            
-        case Qt::Key_F11:
-            toggleFullScreen();
-            event->accept();
-            break;
-            
-        case Qt::Key_Escape:
-            if (m_isFullScreen) {
-                exitFullScreen();
-                event->accept();
-            } else {
-                QWidget::keyPressEvent(event);
-            }
-            break;
-            
-        case Qt::Key_Right:
-            if (m_mediaPlayer && m_mediaPlayer->hasMedia()) {
-                qint64 newPos = m_mediaPlayer->position() + 10000;
-                setPosition(newPos);
-                event->accept();
-            }
-            break;
-            
-        case Qt::Key_Left:
-            if (m_mediaPlayer && m_mediaPlayer->hasMedia()) {
-                qint64 newPos = m_mediaPlayer->position() - 10000;
-                setPosition(newPos);
-                event->accept();
-            }
-            break;
-            
-        case Qt::Key_Up:
-            setVolume(volume() + 5);
-            event->accept();
-            break;
-            
-        case Qt::Key_Down:
-            setVolume(volume() - 5);
-            event->accept();
-            break;
-            
-        default:
+        } else {
             QWidget::keyPressEvent(event);
-            break;
+        }
+        return;
+    }
+    
+    // Create QKeySequence from the event
+    QKeyCombination combination(event->modifiers(), static_cast<Qt::Key>(event->key()));
+    QKeySequence keySeq(combination);
+    
+    qDebug() << "LightweightVideoPlayer: Key press event - KeySequence:" << keySeq.toString();
+    
+    // Find if this key is bound to an action
+    bool handled = false;
+    
+    if (m_keybindManager) {
+        // Check all actions
+        QList<KeybindManager::Action> actions = {
+            KeybindManager::Action::PlayPause,
+            KeybindManager::Action::Stop,
+            KeybindManager::Action::SeekForward,
+            KeybindManager::Action::SeekBackward,
+            KeybindManager::Action::VolumeUp,
+            KeybindManager::Action::VolumeDown
+        };
+        
+        for (const auto& action : actions) {
+            QList<QKeySequence> keybinds = m_keybindManager->getKeybinds(action);
+            
+            if (keybinds.contains(keySeq)) {
+                // Execute the action
+                switch (action) {
+                    case KeybindManager::Action::PlayPause:
+                        on_playButton_clicked();
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::Stop:
+                        stop();
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::SeekForward:
+                        if (m_mediaPlayer && m_mediaPlayer->hasMedia()) {
+                            qint64 newPos = m_mediaPlayer->position() + 10000;
+                            setPosition(newPos);
+                            handled = true;
+                        }
+                        break;
+                        
+                    case KeybindManager::Action::SeekBackward:
+                        if (m_mediaPlayer && m_mediaPlayer->hasMedia()) {
+                            qint64 newPos = m_mediaPlayer->position() - 10000;
+                            setPosition(newPos);
+                            handled = true;
+                        }
+                        break;
+                        
+                    case KeybindManager::Action::VolumeUp:
+                        setVolume(volume() + 5);
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::VolumeDown:
+                        setVolume(volume() - 5);
+                        handled = true;
+                        break;
+                }
+                
+                break; // Found a matching keybind, stop checking
+            }
+        }
+    }
+    
+    if (handled) {
+        event->accept();
+    } else {
+        QWidget::keyPressEvent(event);
     }
 }
 
@@ -970,6 +1030,20 @@ bool LightweightVideoPlayer::eventFilter(QObject *watched, QEvent *event)
     }
     
     return QWidget::eventFilter(watched, event);
+}
+
+void LightweightVideoPlayer::openKeybindEditor()
+{
+    qDebug() << "LightweightVideoPlayer: Opening keybind editor";
+    
+    if (!m_keybindManager) {
+        QMessageBox::warning(this, tr("Error"), 
+                           tr("Keybind manager is not initialized."));
+        return;
+    }
+    
+    KeybindEditorDialog dialog(m_keybindManager.get(), this);
+    dialog.exec();
 }
 
 // Helper methods

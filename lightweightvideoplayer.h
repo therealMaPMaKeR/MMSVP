@@ -17,6 +17,7 @@
 #include <memory>
 #include "qspinbox.h"
 #include "vp_vlcplayer.h"
+#include "keybindmanager.h"
 
 /**
  * @class LightweightVideoPlayer
@@ -119,6 +120,7 @@ protected:
     QPointer<QPushButton> m_playButton;
     QPointer<QPushButton> m_stopButton;
     QPointer<QPushButton> m_fullScreenButton;
+    QPointer<QPushButton> m_keybindsButton;
     QPointer<QSlider> m_positionSlider;
     QPointer<QSlider> m_volumeSlider;
     QPointer<QDoubleSpinBox> m_speedSpinBox;
@@ -147,8 +149,12 @@ protected:
     QTimer* m_mouseCheckTimer;
     QPoint m_lastMousePos;
     
+    // Keybind manager
+    std::unique_ptr<KeybindManager> m_keybindManager;
+    
 private:
     void initializePlayer();
+    void openKeybindEditor();
 };
 
 #endif // LIGHTWEIGHTVIDEOPLAYER_H

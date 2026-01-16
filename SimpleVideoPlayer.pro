@@ -9,11 +9,15 @@ CONFIG += c++17
 SOURCES += \
     main.cpp \
     vp_vlcplayer.cpp \
-    lightweightvideoplayer.cpp
+    lightweightvideoplayer.cpp \
+    keybindmanager.cpp \
+    keybindeditordialog.cpp
 
 HEADERS += \
     vp_vlcplayer.h \
-    lightweightvideoplayer.h
+    lightweightvideoplayer.h \
+    keybindmanager.h \
+    keybindeditordialog.h
 
 # LibVLC configuration for Windows
 win32 {
