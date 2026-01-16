@@ -122,6 +122,7 @@ LightweightVideoPlayer::LightweightVideoPlayer(QWidget *parent, int initialVolum
     , m_loopMode(LoopMode::NoLoop)
     , m_loadPlaybackSpeed(true)
     , m_currentLoopStateIndex(-1)
+    , m_lastClickedPosition(-1)
 {
     qDebug() << "LightweightVideoPlayer: Constructor called";
     
@@ -719,6 +720,11 @@ void LightweightVideoPlayer::on_fullScreenButton_clicked()
 void LightweightVideoPlayer::on_positionSlider_sliderMoved(int position)
 {
     qDebug() << "LightweightVideoPlayer: Position slider moved to" << position;
+    
+    // Save the clicked position for "Return to Last Position" feature
+    m_lastClickedPosition = position;
+    qDebug() << "LightweightVideoPlayer: Saved last clicked position:" << m_lastClickedPosition;
+    
     setPosition(position);
 }
 
@@ -1011,6 +1017,7 @@ void LightweightVideoPlayer::keyPressEvent(QKeyEvent *event)
             KeybindManager::Action::SpeedDown,
             KeybindManager::Action::ToggleLoadSpeed,
             KeybindManager::Action::CycleLoopMode,
+            KeybindManager::Action::ReturnToLastPosition,
             KeybindManager::Action::StateGroup1,
             KeybindManager::Action::StateGroup2,
             KeybindManager::Action::StateGroup3,
@@ -1076,6 +1083,11 @@ void LightweightVideoPlayer::keyPressEvent(QKeyEvent *event)
                         
                     case KeybindManager::Action::CycleLoopMode:
                         cycleLoopMode();
+                        handled = true;
+                        break;
+                        
+                    case KeybindManager::Action::ReturnToLastPosition:
+                        returnToLastPosition();
                         handled = true;
                         break;
                         
@@ -1364,6 +1376,24 @@ void LightweightVideoPlayer::cycleLoopMode()
     qDebug() << "LightweightVideoPlayer: Loop mode changed to" << modeStr;
     
     showTemporaryMessage(tr("Loop Mode: %1").arg(modeStr));
+}
+
+void LightweightVideoPlayer::returnToLastPosition()
+{
+    // Check if there's a saved position
+    if (m_lastClickedPosition < 0) {
+        qDebug() << "LightweightVideoPlayer: No last clicked position saved, doing nothing";
+        return;
+    }
+    
+    // Check if media is loaded
+    if (!m_mediaPlayer || !m_mediaPlayer->hasMedia()) {
+        qDebug() << "LightweightVideoPlayer: No media loaded, cannot return to last position";
+        return;
+    }
+    
+    qDebug() << "LightweightVideoPlayer: Returning to last clicked position:" << m_lastClickedPosition << "ms";
+    setPosition(m_lastClickedPosition);
 }
 
 void LightweightVideoPlayer::checkLoopPoint()

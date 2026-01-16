@@ -182,6 +182,7 @@ protected:
     LoopMode m_loopMode;
     bool m_loadPlaybackSpeed;
     int m_currentLoopStateIndex;  // Track which state is currently looping
+    qint64 m_lastClickedPosition;  // Last position clicked on slider
     
 private:
     void initializePlayer();
@@ -192,6 +193,7 @@ private:
     void deletePlaybackState(int stateIndex);
     void toggleLoadPlaybackSpeed();
     void cycleLoopMode();
+    void returnToLastPosition();
     void checkLoopPoint();
     int getStateIndexFromKey(Qt::Key key) const;
     int getStateIndexFromKeySequence(const QKeySequence& keySeq) const;

@@ -165,6 +165,8 @@ QString KeybindManager::actionToString(Action action)
             return "Toggle Load Speed";
         case Action::CycleLoopMode:
             return "Cycle Loop Mode";
+        case Action::ReturnToLastPosition:
+            return "Return to Last Position";
         case Action::StateKeys:
             return "State Keys (1-12)";
         case Action::StateGroup1:
@@ -230,6 +232,9 @@ QList<QKeySequence> KeybindManager::getDefaultKeybinds(Action action)
             defaults << QKeySequence(Qt::Key_F5);
             break;
         case Action::CycleLoopMode:
+            defaults << QKeySequence(Qt::Key_F6);
+            break;
+        case Action::ReturnToLastPosition:
             defaults << QKeySequence(Qt::Key_F9);
             break;
         case Action::StateKeys:
@@ -284,6 +289,7 @@ void KeybindManager::resetToDefaults()
     m_keybinds[Action::DeleteState] = getDefaultKeybinds(Action::DeleteState);
     m_keybinds[Action::ToggleLoadSpeed] = getDefaultKeybinds(Action::ToggleLoadSpeed);
     m_keybinds[Action::CycleLoopMode] = getDefaultKeybinds(Action::CycleLoopMode);
+    m_keybinds[Action::ReturnToLastPosition] = getDefaultKeybinds(Action::ReturnToLastPosition);
     m_keybinds[Action::StateKeys] = getDefaultKeybinds(Action::StateKeys);
     m_keybinds[Action::StateGroup1] = getDefaultKeybinds(Action::StateGroup1);
     m_keybinds[Action::StateGroup2] = getDefaultKeybinds(Action::StateGroup2);
@@ -328,6 +334,7 @@ bool KeybindManager::saveKeybinds()
         Action::DeleteState,
         Action::ToggleLoadSpeed,
         Action::CycleLoopMode,
+        Action::ReturnToLastPosition,
         Action::StateKeys
     };
     
@@ -380,6 +387,7 @@ bool KeybindManager::loadKeybinds()
     actionMap["DeleteState(Shift+Num)"] = Action::DeleteState;
     actionMap["ToggleLoadSpeed"] = Action::ToggleLoadSpeed;
     actionMap["CycleLoopMode"] = Action::CycleLoopMode;
+    actionMap["ReturnToLastPosition"] = Action::ReturnToLastPosition;
     actionMap["StateKeys(1-12)"] = Action::StateKeys;
     actionMap["StateGroup1"] = Action::StateGroup1;
     actionMap["StateGroup2"] = Action::StateGroup2;
@@ -439,7 +447,7 @@ bool KeybindManager::loadKeybinds()
     file.close();
     
     // Verify that all actions have been loaded
-    if (m_keybinds.size() != 18) {
+    if (m_keybinds.size() != 19) {
         qWarning() << "KeybindManager: Not all actions were loaded from file";
         return false;
     }

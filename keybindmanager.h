@@ -33,7 +33,8 @@ public:
         SetLoopEnd,         // Alt + number (saves end position for looping) - DISPLAY ONLY
         DeleteState,        // Shift + number (deletes state) - DISPLAY ONLY
         ToggleLoadSpeed,    // F5 (toggles whether loading state changes speed)
-        CycleLoopMode,      // F9 (cycles through loop modes)
+        CycleLoopMode,      // F6 (cycles through loop modes)
+        ReturnToLastPosition, // F9 (returns to last clicked position on slider)
         StateKeys,          // 12 customizable keys for states (1-9,0,-,=)
         StateGroup1,        // F1 (switch to state group 1)
         StateGroup2,        // F2 (switch to state group 2)
