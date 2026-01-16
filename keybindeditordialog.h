@@ -38,6 +38,7 @@ private:
     void populateTable();
     void updateKeybindDisplay(int row);
     void startEditingKeybind(int row, int keybindIndex);
+    void startEditingStateKeys(int row);
     void clearKeybind(int row, int keybindIndex);
     void resetInstructionLabel();
     QString getKeybindDisplayText(const QKeySequence& keySeq) const;

@@ -29,11 +29,12 @@ public:
         VolumeDown,
         SpeedUp,
         SpeedDown,
-        SaveState,          // Ctrl + number (saves start position)
-        SetLoopEnd,         // Alt + number (saves end position for looping)
-        DeleteState,        // Shift + number (deletes state)
+        SaveState,          // Ctrl + number (saves start position) - DISPLAY ONLY
+        SetLoopEnd,         // Alt + number (saves end position for looping) - DISPLAY ONLY
+        DeleteState,        // Shift + number (deletes state) - DISPLAY ONLY
         ToggleLoadSpeed,    // F5 (toggles whether loading state changes speed)
-        CycleLoopMode       // F9 (cycles through loop modes)
+        CycleLoopMode,      // F9 (cycles through loop modes)
+        StateKeys           // 12 customizable keys for states (1-9,0,-,=)
     };
 
     explicit KeybindManager(QObject *parent = nullptr);
@@ -59,6 +60,9 @@ public:
     
     // Get action name as string
     static QString actionToString(Action action);
+    
+    // Check if an action is editable
+    static bool isActionEditable(Action action);
     
     // Get default keybinds for an action
     static QList<QKeySequence> getDefaultKeybinds(Action action);

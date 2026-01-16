@@ -918,40 +918,41 @@ void LightweightVideoPlayer::keyPressEvent(QKeyEvent *event)
     Qt::Key key = static_cast<Qt::Key>(event->key());
     Qt::KeyboardModifiers modifiers = event->modifiers();
     
-    // Get state index from key (1-9, 0, -, =)
-    int stateIndex = getStateIndexFromKey(key);
+    // Create QKeySequence from the event
+    QKeyCombination combination(modifiers, key);
+    QKeySequence keySeq(combination);
     
-    // Handle state-related keybinds (Ctrl/Alt/Shift + number keys)
-    if (stateIndex >= 0) {
+    // Check if this is a state key without modifiers (from the customizable StateKeys list)
+    QKeySequence baseKeySeq(key);
+    int baseStateIndex = getStateIndexFromKeySequence(baseKeySeq);
+    
+    // Handle state-related keybinds
+    if (baseStateIndex >= 0) {
         if (modifiers == Qt::ControlModifier) {
-            // Ctrl + number: Save state
-            savePlaybackState(stateIndex);
+            // Ctrl + state key: Save state
+            savePlaybackState(baseStateIndex);
             event->accept();
             return;
         }
         else if (modifiers == Qt::AltModifier) {
-            // Alt + number: Set loop end
-            setLoopEndPosition(stateIndex);
+            // Alt + state key: Set loop end
+            setLoopEndPosition(baseStateIndex);
             event->accept();
             return;
         }
         else if (modifiers == Qt::ShiftModifier) {
-            // Shift + number: Delete state
-            deletePlaybackState(stateIndex);
+            // Shift + state key: Delete state
+            deletePlaybackState(baseStateIndex);
             event->accept();
             return;
         }
         else if (modifiers == Qt::NoModifier) {
-            // Plain number: Load state
-            loadPlaybackState(stateIndex);
+            // Plain state key: Load state
+            loadPlaybackState(baseStateIndex);
             event->accept();
             return;
         }
     }
-    
-    // Create QKeySequence from the event for other keybinds
-    QKeyCombination combination(modifiers, key);
-    QKeySequence keySeq(combination);
     
     qDebug() << "LightweightVideoPlayer: Key press event - KeySequence:" << keySeq.toString();
     
@@ -1310,36 +1311,59 @@ void LightweightVideoPlayer::checkLoopPoint()
         }
     }
     else if (m_loopMode == LoopMode::LoopAll) {
+        // If no state is currently active, find the first loopable state
+        if (m_currentLoopStateIndex < 0 || m_currentLoopStateIndex >= 12) {
+            for (int i = 0; i < 12; i++) {
+                if (m_playbackStates[i].isValid && m_playbackStates[i].hasEndPosition) {
+                    qDebug() << "LightweightVideoPlayer: Starting LoopAll with state" << (i + 1);
+                    loadPlaybackState(i);
+                    return;
+                }
+            }
+            // No loopable states found, disable loop all
+            qDebug() << "LightweightVideoPlayer: No loopable states found, disabling LoopAll";
+            m_loopMode = LoopMode::NoLoop;
+            return;
+        }
+        
         // Check if current state has reached its end, then move to next loopable state
-        if (m_currentLoopStateIndex >= 0 && m_currentLoopStateIndex < 12) {
-            const PlaybackState& currentState = m_playbackStates[m_currentLoopStateIndex];
-            
-            if (currentState.isValid && currentState.hasEndPosition) {
-                if (currentPosition >= currentState.endPosition - tolerance) {
-                    // Find next valid loopable state
-                    int nextStateIndex = (m_currentLoopStateIndex + 1) % 12;
-                    int searchCount = 0;
-                    
-                    while (searchCount < 12) {
-                        if (m_playbackStates[nextStateIndex].isValid && 
-                            m_playbackStates[nextStateIndex].hasEndPosition) {
-                            // Found next loopable state
-                            qDebug() << "LightweightVideoPlayer: Moving to next loop state" << (nextStateIndex + 1);
-                            loadPlaybackState(nextStateIndex);
-                            return;
-                        }
+        const PlaybackState& currentState = m_playbackStates[m_currentLoopStateIndex];
+        
+        if (currentState.isValid && currentState.hasEndPosition) {
+            if (currentPosition >= currentState.endPosition - tolerance) {
+                // Find next valid loopable state
+                int nextStateIndex = (m_currentLoopStateIndex + 1) % 12;
+                int searchCount = 0;
+                
+                while (searchCount < 12) {
+                    if (m_playbackStates[nextStateIndex].isValid && 
+                        m_playbackStates[nextStateIndex].hasEndPosition) {
+                        // Found next loopable state
+                        qDebug() << "LightweightVideoPlayer: Moving to next loop state" << (nextStateIndex + 1);
                         
-                        nextStateIndex = (nextStateIndex + 1) % 12;
-                        searchCount++;
+                        // Temporarily disable loop checking to prevent recursion
+                        LoopMode savedMode = m_loopMode;
+                        m_loopMode = LoopMode::NoLoop;
+                        loadPlaybackState(nextStateIndex);
+                        m_loopMode = savedMode;
+                        return;
                     }
                     
-                    // No more loopable states found, go back to first loopable state
-                    for (int i = 0; i < 12; i++) {
-                        if (m_playbackStates[i].isValid && m_playbackStates[i].hasEndPosition) {
-                            qDebug() << "LightweightVideoPlayer: Looping back to first state" << (i + 1);
-                            loadPlaybackState(i);
-                            return;
-                        }
+                    nextStateIndex = (nextStateIndex + 1) % 12;
+                    searchCount++;
+                }
+                
+                // No more loopable states found, go back to first loopable state
+                for (int i = 0; i < 12; i++) {
+                    if (m_playbackStates[i].isValid && m_playbackStates[i].hasEndPosition) {
+                        qDebug() << "LightweightVideoPlayer: Looping back to first state" << (i + 1);
+                        
+                        // Temporarily disable loop checking to prevent recursion
+                        LoopMode savedMode = m_loopMode;
+                        m_loopMode = LoopMode::NoLoop;
+                        loadPlaybackState(i);
+                        m_loopMode = savedMode;
+                        return;
                     }
                 }
             }
@@ -1365,6 +1389,25 @@ int LightweightVideoPlayer::getStateIndexFromKey(Qt::Key key) const
         case Qt::Key_Equal: return 11;
         default: return -1;  // Not a state key
     }
+}
+
+int LightweightVideoPlayer::getStateIndexFromKeySequence(const QKeySequence& keySeq) const
+{
+    if (!m_keybindManager || keySeq.isEmpty()) {
+        return -1;
+    }
+    
+    // Get the state keys from the keybind manager
+    QList<QKeySequence> stateKeys = m_keybindManager->getKeybinds(KeybindManager::Action::StateKeys);
+    
+    // Find which index this key sequence corresponds to
+    for (int i = 0; i < stateKeys.size() && i < 12; i++) {
+        if (stateKeys[i] == keySeq) {
+            return i;
+        }
+    }
+    
+    return -1;  // Not a state key
 }
 
 QString LightweightVideoPlayer::getLoopModeString() const

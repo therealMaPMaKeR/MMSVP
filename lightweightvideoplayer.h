@@ -193,6 +193,7 @@ private:
     void cycleLoopMode();
     void checkLoopPoint();
     int getStateIndexFromKey(Qt::Key key) const;
+    int getStateIndexFromKeySequence(const QKeySequence& keySeq) const;
     QString getLoopModeString() const;
     void showTemporaryMessage(const QString& message);
 };

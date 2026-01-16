@@ -4,6 +4,10 @@
 #include <QHeaderView>
 #include <QKeyEvent>
 #include <QPushButton>
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QGridLayout>
+#include <QLineEdit>
 
 // KeyCaptureWidget implementation
 KeybindEditorDialog::KeyCaptureWidget::KeyCaptureWidget(QWidget *parent)
@@ -158,6 +162,7 @@ void KeybindEditorDialog::populateTable()
         KeybindManager::Action::VolumeDown,
         KeybindManager::Action::SpeedUp,
         KeybindManager::Action::SpeedDown,
+        KeybindManager::Action::StateKeys,
         KeybindManager::Action::SaveState,
         KeybindManager::Action::SetLoopEnd,
         KeybindManager::Action::DeleteState,
@@ -207,16 +212,57 @@ void KeybindEditorDialog::updateKeybindDisplay(int row)
     
     KeybindManager::Action action = static_cast<KeybindManager::Action>(actionItem->data(Qt::UserRole).toInt());
     QList<QKeySequence> keybinds = m_tempKeybinds.value(action);
+    bool isEditable = KeybindManager::isActionEditable(action);
+    
+    // For StateKeys action, show all 12 keys in the display
+    if (action == KeybindManager::Action::StateKeys) {
+        QTableWidgetItem* primaryItem = m_tableWidget->item(row, 1);
+        if (primaryItem) {
+            QStringList keyList;
+            for (int i = 0; i < qMin(12, keybinds.size()); i++) {
+                if (!keybinds[i].isEmpty()) {
+                    keyList << keybinds[i].toString(QKeySequence::NativeText);
+                } else {
+                    keyList << "[Empty]";
+                }
+            }
+            primaryItem->setText(keyList.join(", "));
+            primaryItem->setBackground(QBrush(QColor(220, 240, 220)));
+        }
+        
+        // For StateKeys, secondary column shows "Click to Edit All"
+        QTableWidgetItem* secondaryItem = m_tableWidget->item(row, 2);
+        if (secondaryItem) {
+            secondaryItem->setText(tr("[Click Primary to Edit]"));
+            secondaryItem->setBackground(QBrush(QColor(240, 240, 240)));
+            secondaryItem->setFlags(secondaryItem->flags() & ~Qt::ItemIsEnabled);
+        }
+        return;
+    }
     
     // Update primary keybind
     QTableWidgetItem* primaryItem = m_tableWidget->item(row, 1);
     if (primaryItem) {
         if (keybinds.size() > 0 && !keybinds[0].isEmpty()) {
             primaryItem->setText(getKeybindDisplayText(keybinds[0]));
-            primaryItem->setBackground(QBrush(QColor(240, 240, 240)));
+            if (isEditable) {
+                primaryItem->setBackground(QBrush(QColor(240, 240, 240)));
+            } else {
+                primaryItem->setBackground(QBrush(QColor(220, 220, 220)));
+                primaryItem->setForeground(QBrush(QColor(100, 100, 100)));
+            }
         } else {
             primaryItem->setText(tr("[Not Set]"));
-            primaryItem->setBackground(QBrush(QColor(255, 250, 240)));
+            if (isEditable) {
+                primaryItem->setBackground(QBrush(QColor(255, 250, 240)));
+            } else {
+                primaryItem->setBackground(QBrush(QColor(220, 220, 220)));
+            }
+        }
+        
+        // Disable interaction for non-editable actions
+        if (!isEditable) {
+            primaryItem->setFlags(primaryItem->flags() & ~Qt::ItemIsEnabled);
         }
     }
     
@@ -225,10 +271,24 @@ void KeybindEditorDialog::updateKeybindDisplay(int row)
     if (secondaryItem) {
         if (keybinds.size() > 1 && !keybinds[1].isEmpty()) {
             secondaryItem->setText(getKeybindDisplayText(keybinds[1]));
-            secondaryItem->setBackground(QBrush(QColor(240, 240, 240)));
+            if (isEditable) {
+                secondaryItem->setBackground(QBrush(QColor(240, 240, 240)));
+            } else {
+                secondaryItem->setBackground(QBrush(QColor(220, 220, 220)));
+                secondaryItem->setForeground(QBrush(QColor(100, 100, 100)));
+            }
         } else {
             secondaryItem->setText(tr("[Not Set]"));
-            secondaryItem->setBackground(QBrush(QColor(255, 250, 240)));
+            if (isEditable) {
+                secondaryItem->setBackground(QBrush(QColor(255, 250, 240)));
+            } else {
+                secondaryItem->setBackground(QBrush(QColor(220, 220, 220)));
+            }
+        }
+        
+        // Disable interaction for non-editable actions
+        if (!isEditable) {
+            secondaryItem->setFlags(secondaryItem->flags() & ~Qt::ItemIsEnabled);
         }
     }
 }
@@ -241,6 +301,26 @@ void KeybindEditorDialog::onCellClicked(int row, int column)
     }
     
     qDebug() << "KeybindEditorDialog: Cell clicked - row:" << row << "column:" << column;
+    
+    // Get the action
+    QTableWidgetItem* actionItem = m_tableWidget->item(row, 0);
+    if (!actionItem) return;
+    
+    KeybindManager::Action action = static_cast<KeybindManager::Action>(actionItem->data(Qt::UserRole).toInt());
+    
+    // Check if action is editable
+    if (!KeybindManager::isActionEditable(action)) {
+        qDebug() << "KeybindEditorDialog: Action is not editable:" << KeybindManager::actionToString(action);
+        return;
+    }
+    
+    // Special handling for StateKeys - open a multi-key editor
+    if (action == KeybindManager::Action::StateKeys) {
+        if (column == 1) {  // Only allow editing from primary column
+            startEditingStateKeys(row);
+        }
+        return;
+    }
     
     // Determine which keybind index (0 = primary, 1 = secondary)
     int keybindIndex = column - 1;
@@ -262,6 +342,23 @@ void KeybindEditorDialog::onCellRightClicked(const QPoint& pos)
     }
     
     qDebug() << "KeybindEditorDialog: Right-click on row:" << row << "column:" << column;
+    
+    // Get the action
+    QTableWidgetItem* actionItem = m_tableWidget->item(row, 0);
+    if (!actionItem) return;
+    
+    KeybindManager::Action action = static_cast<KeybindManager::Action>(actionItem->data(Qt::UserRole).toInt());
+    
+    // Check if action is editable
+    if (!KeybindManager::isActionEditable(action)) {
+        qDebug() << "KeybindEditorDialog: Action is not editable:" << KeybindManager::actionToString(action);
+        return;
+    }
+    
+    // Don't allow right-click clear on StateKeys (use the editor instead)
+    if (action == KeybindManager::Action::StateKeys) {
+        return;
+    }
     
     // Determine which keybind index (0 = primary, 1 = secondary)
     int keybindIndex = column - 1;
@@ -386,6 +483,180 @@ void KeybindEditorDialog::startEditingKeybind(int row, int keybindIndex)
     m_instructionLabel->setStyleSheet("QLabel { color: #2196F3; font-weight: bold; margin-bottom: 10px; }");
 }
 
+void KeybindEditorDialog::startEditingStateKeys(int row)
+{
+    qDebug() << "KeybindEditorDialog: Starting state keys edit for row" << row;
+    
+    // Get the action
+    QTableWidgetItem* actionItem = m_tableWidget->item(row, 0);
+    if (!actionItem) return;
+    
+    KeybindManager::Action action = static_cast<KeybindManager::Action>(actionItem->data(Qt::UserRole).toInt());
+    if (action != KeybindManager::Action::StateKeys) return;
+    
+    // Get current state keys
+    QList<QKeySequence> currentKeys = m_tempKeybinds.value(action);
+    
+    // Ensure we have exactly 12 keys (fill with empty if needed)
+    while (currentKeys.size() < 12) {
+        currentKeys.append(QKeySequence());
+    }
+    
+    // Create a dialog to edit all 12 state keys
+    QDialog* stateKeysDialog = new QDialog(this);
+    stateKeysDialog->setWindowTitle(tr("Edit State Keys"));
+    stateKeysDialog->setModal(true);
+    stateKeysDialog->resize(500, 450);
+    
+    QVBoxLayout* dialogLayout = new QVBoxLayout(stateKeysDialog);
+    
+    QLabel* instructionLabel = new QLabel(tr("Click on a key field and press a key to assign it to that state."), stateKeysDialog);
+    instructionLabel->setWordWrap(true);
+    dialogLayout->addWidget(instructionLabel);
+    
+    // Create grid for 12 state keys
+    QGridLayout* gridLayout = new QGridLayout();
+    
+    QList<QLineEdit*> keyEdits;
+    for (int i = 0; i < 12; i++) {
+        QLabel* stateLabel = new QLabel(tr("State %1:").arg(i + 1), stateKeysDialog);
+        QLineEdit* keyEdit = new QLineEdit(stateKeysDialog);
+        keyEdit->setReadOnly(true);
+        keyEdit->setText(currentKeys[i].isEmpty() ? tr("[Not Set]") : currentKeys[i].toString(QKeySequence::NativeText));
+        keyEdit->setProperty("stateIndex", i);
+        
+        // Install event filter to capture key presses
+        keyEdit->installEventFilter(stateKeysDialog);
+        
+        int gridRow = i / 2;
+        int gridCol = (i % 2) * 2;
+        gridLayout->addWidget(stateLabel, gridRow, gridCol);
+        gridLayout->addWidget(keyEdit, gridRow, gridCol + 1);
+        
+        keyEdits.append(keyEdit);
+    }
+    
+    dialogLayout->addLayout(gridLayout);
+    
+    // Add buttons
+    QHBoxLayout* buttonLayout = new QHBoxLayout();
+    QPushButton* okButton = new QPushButton(tr("OK"), stateKeysDialog);
+    QPushButton* cancelButton = new QPushButton(tr("Cancel"), stateKeysDialog);
+    
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(okButton);
+    buttonLayout->addWidget(cancelButton);
+    
+    dialogLayout->addLayout(buttonLayout);
+    
+    // Store the modified keys
+    QList<QKeySequence> newKeys = currentKeys;
+    
+    // Event filter for capturing key presses
+    stateKeysDialog->installEventFilter(new QObject(stateKeysDialog));
+    
+    // Connect key edit focus events
+    for (int i = 0; i < keyEdits.size(); i++) {
+        QLineEdit* edit = keyEdits[i];
+        
+        QObject::connect(edit, &QLineEdit::selectionChanged, stateKeysDialog, [edit, &newKeys, this]() {
+            // Capture next key press for this edit
+            edit->setStyleSheet("QLineEdit { background-color: #e8f4f8; border: 2px solid #2196F3; }");
+        });
+    }
+    
+    // Install event filter on dialog to capture key presses
+    auto eventFilter = new QObject(stateKeysDialog);
+    stateKeysDialog->installEventFilter(eventFilter);
+    
+    QObject::connect(eventFilter, &QObject::destroyed, [=]() mutable {
+        // Cleanup
+    });
+    
+    // Override event filter
+    class StateKeyEventFilter : public QObject {
+    public:
+        QList<QLineEdit*>* edits;
+        QList<QKeySequence>* keys;
+        KeybindManager* manager;
+        QDialog* dialog;
+        
+        bool eventFilter(QObject* obj, QEvent* event) override {
+            if (event->type() == QEvent::KeyPress) {
+                QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
+                
+                // Find which edit has focus
+                for (int i = 0; i < edits->size(); i++) {
+                    if (edits->at(i)->hasFocus()) {
+                        Qt::Key key = static_cast<Qt::Key>(keyEvent->key());
+                        Qt::KeyboardModifiers modifiers = keyEvent->modifiers();
+                        
+                        // Handle Escape to cancel
+                        if (key == Qt::Key_Escape) {
+                            edits->at(i)->setStyleSheet("");
+                            edits->at(i)->clearFocus();
+                            return true;
+                        }
+                        
+                        // Don't allow modifier-only keys
+                        if (key == Qt::Key_Control || key == Qt::Key_Alt || key == Qt::Key_Shift || key == Qt::Key_Meta) {
+                            return true;
+                        }
+                        
+                        // Create key sequence
+                        QKeyCombination combination(modifiers, key);
+                        QKeySequence keySeq(combination);
+                        
+                        // Validate
+                        if (!manager->isValidKeybind(keySeq)) {
+                            QMessageBox::warning(dialog, QObject::tr("Invalid Key"), 
+                                               QObject::tr("This key cannot be bound."));
+                            return true;
+                        }
+                        
+                        // Check for duplicates in state keys
+                        for (int j = 0; j < keys->size(); j++) {
+                            if (j != i && keys->at(j) == keySeq) {
+                                QMessageBox::warning(dialog, QObject::tr("Duplicate Key"), 
+                                                   QObject::tr("This key is already assigned to State %1.").arg(j + 1));
+                                return true;
+                            }
+                        }
+                        
+                        // Set the key
+                        (*keys)[i] = keySeq;
+                        edits->at(i)->setText(keySeq.toString(QKeySequence::NativeText));
+                        edits->at(i)->setStyleSheet("");
+                        edits->at(i)->clearFocus();
+                        
+                        return true;
+                    }
+                }
+            }
+            
+            return QObject::eventFilter(obj, event);
+        }
+    };
+    
+    StateKeyEventFilter* filter = new StateKeyEventFilter();
+    filter->edits = &keyEdits;
+    filter->keys = &newKeys;
+    filter->manager = m_keybindManager;
+    filter->dialog = stateKeysDialog;
+    stateKeysDialog->installEventFilter(filter);
+    
+    connect(okButton, &QPushButton::clicked, stateKeysDialog, &QDialog::accept);
+    connect(cancelButton, &QPushButton::clicked, stateKeysDialog, &QDialog::reject);
+    
+    if (stateKeysDialog->exec() == QDialog::Accepted) {
+        // Save the new keys
+        m_tempKeybinds[action] = newKeys;
+        updateKeybindDisplay(row);
+    }
+    
+    delete stateKeysDialog;
+}
+
 void KeybindEditorDialog::clearKeybind(int row, int keybindIndex)
 {
     qDebug() << "KeybindEditorDialog: Clearing keybind at row" << row << "index" << keybindIndex;
@@ -439,6 +710,7 @@ void KeybindEditorDialog::onResetToDefaultsClicked()
             KeybindManager::Action::VolumeDown,
             KeybindManager::Action::SpeedUp,
             KeybindManager::Action::SpeedDown,
+            KeybindManager::Action::StateKeys,
             KeybindManager::Action::SaveState,
             KeybindManager::Action::SetLoopEnd,
             KeybindManager::Action::DeleteState,

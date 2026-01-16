@@ -51,9 +51,16 @@ QList<QKeySequence> KeybindManager::getKeybinds(Action action) const
 
 bool KeybindManager::setKeybinds(Action action, const QList<QKeySequence>& keybinds)
 {
-    // Validate that we have at most 2 keybinds
-    if (keybinds.size() > 2) {
-        qWarning() << "KeybindManager: Cannot set more than 2 keybinds per action";
+    // Check if action is editable
+    if (!isActionEditable(action)) {
+        qWarning() << "KeybindManager: Action is not editable:" << actionToString(action);
+        return false;
+    }
+    
+    // StateKeys action can have up to 12 keybinds, others can have at most 2
+    int maxKeybinds = (action == Action::StateKeys) ? 12 : 2;
+    if (keybinds.size() > maxKeybinds) {
+        qWarning() << "KeybindManager: Cannot set more than" << maxKeybinds << "keybinds for action" << actionToString(action);
         return false;
     }
     
@@ -72,9 +79,15 @@ bool KeybindManager::setKeybinds(Action action, const QList<QKeySequence>& keybi
     }
     
     // Check for duplicates within the same action
-    if (keybinds.size() == 2 && keybinds[0] == keybinds[1]) {
-        qWarning() << "KeybindManager: Cannot assign the same keybind twice to one action";
-        return false;
+    QSet<QKeySequence> uniqueKeys;
+    for (const QKeySequence& keySeq : keybinds) {
+        if (!keySeq.isEmpty() && uniqueKeys.contains(keySeq)) {
+            qWarning() << "KeybindManager: Cannot assign the same keybind twice to one action";
+            return false;
+        }
+        if (!keySeq.isEmpty()) {
+            uniqueKeys.insert(keySeq);
+        }
     }
     
     // Set the keybinds
@@ -152,9 +165,19 @@ QString KeybindManager::actionToString(Action action)
             return "Toggle Load Speed";
         case Action::CycleLoopMode:
             return "Cycle Loop Mode";
+        case Action::StateKeys:
+            return "State Keys (1-12)";
         default:
             return "Unknown";
     }
+}
+
+bool KeybindManager::isActionEditable(Action action)
+{
+    // SaveState, SetLoopEnd, and DeleteState are display-only
+    return action != Action::SaveState &&
+           action != Action::SetLoopEnd &&
+           action != Action::DeleteState;
 }
 
 QList<QKeySequence> KeybindManager::getDefaultKeybinds(Action action)
@@ -201,6 +224,21 @@ QList<QKeySequence> KeybindManager::getDefaultKeybinds(Action action)
         case Action::CycleLoopMode:
             defaults << QKeySequence(Qt::Key_F9);
             break;
+        case Action::StateKeys:
+            // Default 12 state keys: 1,2,3,4,5,6,7,8,9,0,-,=
+            defaults << QKeySequence(Qt::Key_1)
+                    << QKeySequence(Qt::Key_2)
+                    << QKeySequence(Qt::Key_3)
+                    << QKeySequence(Qt::Key_4)
+                    << QKeySequence(Qt::Key_5)
+                    << QKeySequence(Qt::Key_6)
+                    << QKeySequence(Qt::Key_7)
+                    << QKeySequence(Qt::Key_8)
+                    << QKeySequence(Qt::Key_9)
+                    << QKeySequence(Qt::Key_0)
+                    << QKeySequence(Qt::Key_Minus)
+                    << QKeySequence(Qt::Key_Equal);
+            break;
     }
     
     return defaults;
@@ -226,6 +264,7 @@ void KeybindManager::resetToDefaults()
     m_keybinds[Action::DeleteState] = getDefaultKeybinds(Action::DeleteState);
     m_keybinds[Action::ToggleLoadSpeed] = getDefaultKeybinds(Action::ToggleLoadSpeed);
     m_keybinds[Action::CycleLoopMode] = getDefaultKeybinds(Action::CycleLoopMode);
+    m_keybinds[Action::StateKeys] = getDefaultKeybinds(Action::StateKeys);
     
     emit keybindsChanged();
 }
@@ -264,7 +303,8 @@ bool KeybindManager::saveKeybinds()
         Action::SetLoopEnd,
         Action::DeleteState,
         Action::ToggleLoadSpeed,
-        Action::CycleLoopMode
+        Action::CycleLoopMode,
+        Action::StateKeys
     };
     
     for (Action action : actions) {
@@ -316,6 +356,7 @@ bool KeybindManager::loadKeybinds()
     actionMap["DeleteState(Shift+Num)"] = Action::DeleteState;
     actionMap["ToggleLoadSpeed"] = Action::ToggleLoadSpeed;
     actionMap["CycleLoopMode"] = Action::CycleLoopMode;
+    actionMap["StateKeys(1-12)"] = Action::StateKeys;
     
     int lineNumber = 0;
     while (!in.atEnd()) {
@@ -370,7 +411,7 @@ bool KeybindManager::loadKeybinds()
     file.close();
     
     // Verify that all actions have been loaded
-    if (m_keybinds.size() != 13) {
+    if (m_keybinds.size() != 14) {
         qWarning() << "KeybindManager: Not all actions were loaded from file";
         return false;
     }
