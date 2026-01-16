@@ -41,9 +41,9 @@ public:
     void play();
     void pause();
     void stop();
-    void setVolume(int volume);
+    void setVolume(int volume, bool showMessage = false);
     void setPosition(qint64 position);
-    void setPlaybackSpeed(qreal speed);
+    void setPlaybackSpeed(qreal speed, bool showMessage = false);
     
     // Fullscreen management
     void toggleFullScreen();

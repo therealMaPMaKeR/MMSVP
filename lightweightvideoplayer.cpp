@@ -497,7 +497,7 @@ void LightweightVideoPlayer::stop()
     }
 }
 
-void LightweightVideoPlayer::setVolume(int volume)
+void LightweightVideoPlayer::setVolume(int volume, bool showMessage)
 {
     qDebug() << "LightweightVideoPlayer: Setting volume to" << volume << "%";
 
@@ -513,6 +513,11 @@ void LightweightVideoPlayer::setVolume(int volume)
 
     if (m_volumeSlider && m_volumeSlider->value() != volume && !m_volumeSlider->isSliderDown()) {
         m_volumeSlider->setValue(volume);
+    }
+
+    // Show temporary message if requested (keybind actions only)
+    if (showMessage) {
+        showTemporaryMessage(tr("Volume: %1%").arg(volume));
     }
 
     emit volumeChanged(volume);
@@ -542,7 +547,7 @@ void LightweightVideoPlayer::setPosition(qint64 position)
     }
 }
 
-void LightweightVideoPlayer::setPlaybackSpeed(qreal speed)
+void LightweightVideoPlayer::setPlaybackSpeed(qreal speed, bool showMessage)
 {
     qDebug() << "LightweightVideoPlayer: Setting playback speed to" << speed;
     
@@ -556,6 +561,11 @@ void LightweightVideoPlayer::setPlaybackSpeed(qreal speed)
         m_speedSpinBox->blockSignals(true);
         m_speedSpinBox->setValue(speed);
         m_speedSpinBox->blockSignals(false);
+    }
+    
+    // Show temporary message if requested (keybind actions only)
+    if (showMessage) {
+        showTemporaryMessage(tr("Speed: %1x").arg(speed, 0, 'f', 1));
     }
     
     emit playbackSpeedChanged(speed);
@@ -1032,22 +1042,22 @@ void LightweightVideoPlayer::keyPressEvent(QKeyEvent *event)
                         break;
                         
                     case KeybindManager::Action::VolumeUp:
-                        setVolume(volume() + 5);
+                        setVolume(volume() + 5, true);  // Show message for keybind action
                         handled = true;
                         break;
                         
                     case KeybindManager::Action::VolumeDown:
-                        setVolume(volume() - 5);
+                        setVolume(volume() - 5, true);  // Show message for keybind action
                         handled = true;
                         break;
                         
                     case KeybindManager::Action::SpeedUp:
-                        setPlaybackSpeed(playbackSpeed() + 0.1);
+                        setPlaybackSpeed(playbackSpeed() + 0.1, true);  // Show message for keybind action
                         handled = true;
                         break;
                         
                     case KeybindManager::Action::SpeedDown:
-                        setPlaybackSpeed(playbackSpeed() - 0.1);
+                        setPlaybackSpeed(playbackSpeed() - 0.1, true);  // Show message for keybind action
                         handled = true;
                         break;
                         
