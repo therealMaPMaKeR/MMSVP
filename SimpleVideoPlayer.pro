@@ -8,15 +8,12 @@ CONFIG += c++17
 
 SOURCES += \
     main.cpp \
-    mainwindow.cpp \
-    videoplayer.cpp
+    vp_vlcplayer.cpp \
+    lightweightvideoplayer.cpp
 
 HEADERS += \
-    mainwindow.h \
-    videoplayer.h
-
-FORMS += \
-    mainwindow.ui
+    vp_vlcplayer.h \
+    lightweightvideoplayer.h
 
 # LibVLC configuration for Windows
 win32 {

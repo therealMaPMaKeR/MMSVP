@@ -1,0 +1,740 @@
+#include "lightweightvideoplayer.h"
+#include <QGuiApplication>
+#include <QDebug>
+#include <QFileInfo>
+#include <QStyle>
+#include <QTime>
+#include <QCloseEvent>
+#include <QApplication>
+#include <QDoubleSpinBox>
+
+// Custom clickable slider class for seeking in video
+class LightweightVideoPlayer::ClickableSlider : public QSlider
+{
+public:
+    explicit ClickableSlider(Qt::Orientation orientation, QWidget *parent = nullptr)
+        : QSlider(orientation, parent), m_isPressed(false) {}
+
+protected:
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        if (event->button() == Qt::LeftButton)
+        {
+            m_isPressed = true;
+            
+            // Calculate position based on click
+            qint64 value = 0;
+            
+            if (orientation() == Qt::Horizontal) {
+                qreal clickPos = event->position().x();
+                qreal widgetWidth = width();
+                
+                qint64 range = static_cast<qint64>(maximum()) - static_cast<qint64>(minimum());
+                qint64 widgetSize = static_cast<qint64>(widgetWidth);
+                
+                if (widgetSize > 0) {
+                    value = minimum() + (range * clickPos) / widgetSize;
+                } else {
+                    value = minimum();
+                }
+            } else {
+                qreal clickPos = height() - event->position().y();
+                qreal widgetHeight = height();
+                
+                qint64 range = static_cast<qint64>(maximum()) - static_cast<qint64>(minimum());
+                qint64 widgetSize = static_cast<qint64>(widgetHeight);
+                
+                if (widgetSize > 0) {
+                    value = minimum() + (range * clickPos) / widgetSize;
+                } else {
+                    value = minimum();
+                }
+            }
+            
+            value = qBound(static_cast<qint64>(minimum()), value, static_cast<qint64>(maximum()));
+            
+            setValue(static_cast<int>(value));
+            emit sliderMoved(static_cast<int>(value));
+            emit sliderPressed();
+            
+            QSlider::mousePressEvent(event);
+        }
+        else {
+            QSlider::mousePressEvent(event);
+        }
+    }
+
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        if (m_isPressed) {
+            m_isPressed = false;
+            emit sliderReleased();
+        }
+        QSlider::mouseReleaseEvent(event);
+    }
+
+    void focusOutEvent(QFocusEvent *event) override
+    {
+        if (m_isPressed) {
+            m_isPressed = false;
+            emit sliderReleased();
+        }
+        QSlider::focusOutEvent(event);
+    }
+
+private:
+    bool m_isPressed;
+};
+
+LightweightVideoPlayer::LightweightVideoPlayer(QWidget *parent, int initialVolume)
+    : QWidget(parent)
+    , m_videoWidget(nullptr)
+    , m_playButton(nullptr)
+    , m_stopButton(nullptr)
+    , m_positionSlider(nullptr)
+    , m_volumeSlider(nullptr)
+    , m_speedSpinBox(nullptr)
+    , m_positionLabel(nullptr)
+    , m_durationLabel(nullptr)
+    , m_volumeLabel(nullptr)
+    , m_speedLabel(nullptr)
+    , m_controlsWidget(nullptr)
+    , m_mainLayout(nullptr)
+    , m_controlLayout(nullptr)
+    , m_sliderLayout(nullptr)
+    , m_isSliderBeingMoved(false)
+    , m_isClosing(false)
+    , m_playbackStartedEmitted(false)
+{
+    qDebug() << "LightweightVideoPlayer: Constructor called";
+    
+    // Set window properties
+    setWindowTitle(tr("Lightweight Video Player"));
+    resize(800, 600);
+    
+    // Center window on screen
+    if (QScreen *screen = QGuiApplication::primaryScreen()) {
+        QRect screenGeometry = screen->availableGeometry();
+        move(screenGeometry.center() - rect().center());
+    }
+    
+    // Initialize the player
+    initializePlayer();
+    
+    // Set initial volume
+    if (m_mediaPlayer) {
+        m_mediaPlayer->setVolume(initialVolume);
+    }
+}
+
+LightweightVideoPlayer::~LightweightVideoPlayer()
+{
+    qDebug() << "LightweightVideoPlayer: Destructor called";
+    
+    // Stop media player
+    if (m_mediaPlayer) {
+        m_mediaPlayer->stop();
+    }
+}
+
+void LightweightVideoPlayer::initializePlayer()
+{
+    qDebug() << "LightweightVideoPlayer: Initializing player";
+
+    // Create VLC player instance
+    m_mediaPlayer = std::make_unique<VP_VLCPlayer>(this);
+
+    if (!m_mediaPlayer->initialize()) {
+        qDebug() << "LightweightVideoPlayer: Failed to initialize VLC player";
+        emit errorOccurred(tr("Failed to initialize video player"));
+        return;
+    }
+
+    // Setup UI
+    setupUI();
+
+    // Connect signals
+    connectSignals();
+    
+    qDebug() << "LightweightVideoPlayer: Initialization complete";
+}
+
+void LightweightVideoPlayer::setupUI()
+{
+    qDebug() << "LightweightVideoPlayer: Setting up UI";
+    
+    // Create video widget
+    m_videoWidget = new QWidget(this);
+    m_videoWidget->setMinimumSize(400, 300);
+    m_videoWidget->setStyleSheet("background-color: black;");
+    m_videoWidget->setAutoFillBackground(true);
+    
+    // Set VLC video output widget
+    m_mediaPlayer->setVideoWidget(m_videoWidget);
+    
+    m_videoWidget->show();
+    m_videoWidget->installEventFilter(this);
+    
+    // Set focus policy
+    setFocusPolicy(Qt::StrongFocus);
+    m_videoWidget->setFocusPolicy(Qt::StrongFocus);
+    
+    // Create controls
+    createControls();
+    
+    // Create layouts
+    createLayouts();
+}
+
+LightweightVideoPlayer::ClickableSlider* LightweightVideoPlayer::createClickableSlider()
+{
+    return new ClickableSlider(Qt::Horizontal, this);
+}
+
+void LightweightVideoPlayer::createControls()
+{
+    qDebug() << "LightweightVideoPlayer: Creating controls";
+    
+    // Play/Pause button
+    m_playButton = new QPushButton(this);
+    m_playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+    m_playButton->setToolTip(tr("Play"));
+    m_playButton->setFocusPolicy(Qt::NoFocus);
+    
+    // Stop button
+    m_stopButton = new QPushButton(this);
+    m_stopButton->setIcon(style()->standardIcon(QStyle::SP_MediaStop));
+    m_stopButton->setToolTip(tr("Stop"));
+    m_stopButton->setFocusPolicy(Qt::NoFocus);
+    
+    // Position slider
+    m_positionSlider = createClickableSlider();
+    m_positionSlider->setRange(0, 0);
+    m_positionSlider->setToolTip(tr("Click to seek"));
+    m_positionSlider->setFocusPolicy(Qt::ClickFocus);
+    
+    // Volume slider
+    m_volumeSlider = createClickableSlider();
+    m_volumeSlider->setRange(0, 200);
+    m_volumeSlider->setValue(70);
+    m_volumeSlider->setMaximumWidth(100);
+    m_volumeSlider->setToolTip(tr("Volume (up to 200%)"));
+    m_volumeSlider->setFocusPolicy(Qt::ClickFocus);
+    
+    // Speed spin box
+    m_speedSpinBox = new QDoubleSpinBox(this);
+    m_speedSpinBox->setRange(0.1, 5.0);
+    m_speedSpinBox->setSingleStep(0.1);
+    m_speedSpinBox->setValue(1.0);
+    m_speedSpinBox->setSuffix("x");
+    m_speedSpinBox->setDecimals(1);
+    m_speedSpinBox->setMaximumWidth(80);
+    m_speedSpinBox->setToolTip(tr("Playback Speed"));
+    m_speedSpinBox->setFocusPolicy(Qt::NoFocus);
+    
+    // Labels
+    m_positionLabel = new QLabel("00:00", this);
+    m_positionLabel->setMinimumWidth(50);
+    
+    m_durationLabel = new QLabel("00:00", this);
+    m_durationLabel->setMinimumWidth(50);
+    
+    m_volumeLabel = new QLabel(tr("Vol (70%):"), this);
+    m_speedLabel = new QLabel(tr("Speed:"), this);
+}
+
+void LightweightVideoPlayer::createLayouts()
+{
+    qDebug() << "LightweightVideoPlayer: Creating layouts";
+    
+    // Control layout (buttons)
+    m_controlLayout = new QHBoxLayout();
+    m_controlLayout->addWidget(m_playButton);
+    m_controlLayout->addWidget(m_stopButton);
+    m_controlLayout->addStretch();
+    
+    // Slider layout (position, volume, and speed)
+    m_sliderLayout = new QHBoxLayout();
+    m_sliderLayout->addWidget(m_positionLabel);
+    m_sliderLayout->addWidget(m_positionSlider, 1);
+    m_sliderLayout->addWidget(m_durationLabel);
+    m_sliderLayout->addSpacing(20);
+    m_sliderLayout->addWidget(m_volumeLabel);
+    m_sliderLayout->addWidget(m_volumeSlider);
+    m_sliderLayout->addSpacing(20);
+    m_sliderLayout->addWidget(m_speedLabel);
+    m_sliderLayout->addWidget(m_speedSpinBox);
+    
+    // Controls widget layout
+    m_controlsWidget = new QWidget(this);
+    QVBoxLayout* controlsLayout = new QVBoxLayout(m_controlsWidget);
+    controlsLayout->addLayout(m_controlLayout);
+    controlsLayout->addLayout(m_sliderLayout);
+    controlsLayout->setContentsMargins(5, 5, 5, 5);
+    
+    // Main layout
+    m_mainLayout = new QVBoxLayout(this);
+    m_mainLayout->addWidget(m_videoWidget, 1);
+    m_mainLayout->addWidget(m_controlsWidget);
+    
+    setLayout(m_mainLayout);
+}
+
+void LightweightVideoPlayer::connectSignals()
+{
+    qDebug() << "LightweightVideoPlayer: Connecting signals";
+    
+    // Button signals
+    if (m_playButton) {
+        connect(m_playButton, &QPushButton::clicked,
+                this, &LightweightVideoPlayer::on_playButton_clicked);
+    }
+    
+    if (m_stopButton) {
+        connect(m_stopButton, &QPushButton::clicked,
+                this, &LightweightVideoPlayer::stop);
+    }
+    
+    // Slider signals
+    if (m_positionSlider) {
+        connect(m_positionSlider, &QSlider::sliderMoved,
+                this, &LightweightVideoPlayer::on_positionSlider_sliderMoved);
+        
+        connect(m_positionSlider, &QSlider::sliderPressed,
+                this, &LightweightVideoPlayer::on_positionSlider_sliderPressed);
+        
+        connect(m_positionSlider, &QSlider::sliderReleased,
+                this, &LightweightVideoPlayer::on_positionSlider_sliderReleased);
+    }
+    
+    if (m_volumeSlider) {
+        connect(m_volumeSlider, &QSlider::sliderMoved,
+                this, &LightweightVideoPlayer::on_volumeSlider_sliderMoved);
+    }
+    
+    if (m_speedSpinBox) {
+        connect(m_speedSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                this, &LightweightVideoPlayer::on_speedSpinBox_valueChanged);
+    }
+    
+    // Media player signals
+    connect(m_mediaPlayer.get(), &VP_VLCPlayer::positionChanged,
+            this, &LightweightVideoPlayer::updatePosition);
+    
+    connect(m_mediaPlayer.get(), &VP_VLCPlayer::durationChanged,
+            this, &LightweightVideoPlayer::updateDuration);
+    
+    connect(m_mediaPlayer.get(), &VP_VLCPlayer::stateChanged,
+            this, &LightweightVideoPlayer::handlePlaybackStateChanged);
+    
+    connect(m_mediaPlayer.get(), &VP_VLCPlayer::errorOccurred,
+            this, &LightweightVideoPlayer::handleError);
+    
+    connect(m_mediaPlayer.get(), &VP_VLCPlayer::finished,
+            this, &LightweightVideoPlayer::handleVideoFinished);
+}
+
+bool LightweightVideoPlayer::loadVideo(const QString& filePath)
+{
+    qDebug() << "LightweightVideoPlayer: Loading video:" << filePath;
+    
+    QFileInfo fileInfo(filePath);
+    
+    if (!fileInfo.exists()) {
+        qDebug() << "LightweightVideoPlayer: File does not exist:" << filePath;
+        emit errorOccurred(tr("File not found: %1").arg(filePath));
+        return false;
+    }
+    
+    // Stop current playback if any
+    if (m_mediaPlayer->isPlaying()) {
+        m_mediaPlayer->stop();
+    }
+    
+    // Load the media with VLC
+    if (!m_mediaPlayer->loadMedia(filePath)) {
+        qDebug() << "LightweightVideoPlayer: Failed to load media with VLC";
+        emit errorOccurred(tr("Failed to load video: %1").arg(m_mediaPlayer->lastError()));
+        return false;
+    }
+    
+    // Store the media path
+    m_currentVideoPath = filePath;
+    
+    // Force video widget to update
+    m_videoWidget->update();
+    m_videoWidget->show();
+    
+    // Process events to ensure rendering
+    QApplication::processEvents();
+    
+    // Update window title with filename
+    setWindowTitle(tr("Lightweight Video Player - %1").arg(fileInfo.fileName()));
+    
+    // Ensure the widget has focus for keyboard input
+    setFocus();
+    
+    qDebug() << "LightweightVideoPlayer: Video loaded successfully";
+    return true;
+}
+
+void LightweightVideoPlayer::play()
+{
+    qDebug() << "LightweightVideoPlayer: Play requested";
+    
+    if (m_currentVideoPath.isEmpty()) {
+        qDebug() << "LightweightVideoPlayer: No video loaded";
+        emit errorOccurred(tr("No video loaded"));
+        return;
+    }
+    
+    m_mediaPlayer->play();
+    setFocus();
+}
+
+void LightweightVideoPlayer::pause()
+{
+    qDebug() << "LightweightVideoPlayer: Pause requested";
+    m_mediaPlayer->pause();
+}
+
+void LightweightVideoPlayer::stop()
+{
+    qDebug() << "LightweightVideoPlayer: Stop requested";
+    
+    if (m_mediaPlayer) {
+        m_mediaPlayer->stop();
+    }
+    if (m_positionSlider) {
+        m_positionSlider->setValue(0);
+    }
+    if (m_positionLabel) {
+        m_positionLabel->setText("00:00");
+    }
+}
+
+void LightweightVideoPlayer::setVolume(int volume)
+{
+    qDebug() << "LightweightVideoPlayer: Setting volume to" << volume << "%";
+
+    volume = qBound(0, volume, 200);
+
+    if (m_mediaPlayer) {
+        m_mediaPlayer->setVolume(volume);
+    }
+
+    if (m_volumeLabel) {
+        m_volumeLabel->setText(tr("Vol (%1%):").arg(volume));
+    }
+
+    if (m_volumeSlider && m_volumeSlider->value() != volume && !m_volumeSlider->isSliderDown()) {
+        m_volumeSlider->setValue(volume);
+    }
+
+    emit volumeChanged(volume);
+}
+
+void LightweightVideoPlayer::setPosition(qint64 position)
+{
+    qDebug() << "LightweightVideoPlayer: Setting position to" << position << "ms";
+    
+    if (!m_mediaPlayer || !m_mediaPlayer->hasMedia()) {
+        qDebug() << "LightweightVideoPlayer: No media loaded, cannot set position";
+        return;
+    }
+    
+    qint64 duration = m_mediaPlayer->duration();
+    if (duration > 0) {
+        position = qBound(static_cast<qint64>(0), position, duration);
+    }
+    
+    m_mediaPlayer->setPosition(position);
+    
+    if (!m_isSliderBeingMoved && m_positionSlider) {
+        m_positionSlider->setValue(static_cast<int>(position));
+    }
+    if (m_positionLabel) {
+        m_positionLabel->setText(formatTime(position));
+    }
+}
+
+void LightweightVideoPlayer::setPlaybackSpeed(qreal speed)
+{
+    qDebug() << "LightweightVideoPlayer: Setting playback speed to" << speed;
+    
+    speed = qBound(0.1, speed, 5.0);
+    
+    if (m_mediaPlayer) {
+        m_mediaPlayer->setPlaybackRate(static_cast<float>(speed));
+    }
+    
+    if (m_speedSpinBox && !qFuzzyCompare(m_speedSpinBox->value(), speed)) {
+        m_speedSpinBox->blockSignals(true);
+        m_speedSpinBox->setValue(speed);
+        m_speedSpinBox->blockSignals(false);
+    }
+    
+    emit playbackSpeedChanged(speed);
+}
+
+// State query functions
+bool LightweightVideoPlayer::isPlaying() const
+{
+    return m_mediaPlayer && m_mediaPlayer->isPlaying();
+}
+
+bool LightweightVideoPlayer::isPaused() const
+{
+    return m_mediaPlayer && m_mediaPlayer->isPaused();
+}
+
+qint64 LightweightVideoPlayer::duration() const
+{
+    return m_mediaPlayer ? m_mediaPlayer->duration() : 0;
+}
+
+qint64 LightweightVideoPlayer::position() const
+{
+    return m_mediaPlayer ? m_mediaPlayer->position() : 0;
+}
+
+int LightweightVideoPlayer::volume() const
+{
+    return m_mediaPlayer ? m_mediaPlayer->volume() : 0;
+}
+
+qreal LightweightVideoPlayer::playbackSpeed() const
+{
+    return m_mediaPlayer ? static_cast<qreal>(m_mediaPlayer->playbackRate()) : 1.0;
+}
+
+QString LightweightVideoPlayer::currentVideoPath() const
+{
+    return m_currentVideoPath;
+}
+
+// Slot implementations
+void LightweightVideoPlayer::on_playButton_clicked()
+{
+    qDebug() << "LightweightVideoPlayer: Play button clicked";
+    
+    if (m_mediaPlayer->isPlaying()) {
+        pause();
+    } else {
+        play();
+    }
+}
+
+void LightweightVideoPlayer::on_positionSlider_sliderMoved(int position)
+{
+    qDebug() << "LightweightVideoPlayer: Position slider moved to" << position;
+    setPosition(position);
+}
+
+void LightweightVideoPlayer::on_positionSlider_sliderPressed()
+{
+    qDebug() << "LightweightVideoPlayer: Position slider pressed";
+    m_isSliderBeingMoved = true;
+}
+
+void LightweightVideoPlayer::on_positionSlider_sliderReleased()
+{
+    qDebug() << "LightweightVideoPlayer: Position slider released";
+    m_isSliderBeingMoved = false;
+}
+
+void LightweightVideoPlayer::on_volumeSlider_sliderMoved(int position)
+{
+    qDebug() << "LightweightVideoPlayer: Volume slider moved to" << position << "%";
+    setVolume(position);
+}
+
+void LightweightVideoPlayer::on_speedSpinBox_valueChanged(double value)
+{
+    qDebug() << "LightweightVideoPlayer: Speed spin box changed to" << value;
+    setPlaybackSpeed(value);
+}
+
+void LightweightVideoPlayer::updatePosition(qint64 position)
+{
+    if (!m_isSliderBeingMoved && m_positionSlider) {
+        m_positionSlider->setValue(static_cast<int>(position));
+    }
+    if (m_positionLabel) {
+        m_positionLabel->setText(formatTime(position));
+    }
+    emit positionChanged(position);
+}
+
+void LightweightVideoPlayer::updateDuration(qint64 duration)
+{
+    qDebug() << "LightweightVideoPlayer: Duration updated to" << duration << "ms";
+    
+    if (m_positionSlider) {
+        m_positionSlider->setMaximum(static_cast<int>(duration));
+    }
+    if (m_durationLabel) {
+        m_durationLabel->setText(formatTime(duration));
+    }
+    
+    emit durationChanged(duration);
+}
+
+void LightweightVideoPlayer::handleError(const QString &errorString)
+{
+    qDebug() << "LightweightVideoPlayer: Error occurred:" << errorString;
+    emit errorOccurred(errorString);
+}
+
+void LightweightVideoPlayer::handlePlaybackStateChanged(VP_VLCPlayer::PlayerState state)
+{
+    qDebug() << "LightweightVideoPlayer: Playback state changed to" << static_cast<int>(state);
+    
+    if (!m_playButton) {
+        emit playbackStateChanged(state);
+        return;
+    }
+    
+    switch (state) {
+        case VP_VLCPlayer::PlayerState::Playing:
+            m_playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
+            m_playButton->setToolTip(tr("Pause"));
+            
+            if (!m_playbackStartedEmitted) {
+                m_playbackStartedEmitted = true;
+                emit playbackStarted();
+            }
+            break;
+            
+        case VP_VLCPlayer::PlayerState::Paused:
+            m_playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+            m_playButton->setToolTip(tr("Play"));
+            break;
+            
+        case VP_VLCPlayer::PlayerState::Stopped:
+            m_playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+            m_playButton->setToolTip(tr("Play"));
+            m_playbackStartedEmitted = false;
+            break;
+            
+        default:
+            break;
+    }
+    
+    emit playbackStateChanged(state);
+}
+
+void LightweightVideoPlayer::handleVideoFinished()
+{
+    qDebug() << "LightweightVideoPlayer: Video finished";
+    emit finished();
+}
+
+// Event handlers
+void LightweightVideoPlayer::closeEvent(QCloseEvent *event)
+{
+    qDebug() << "LightweightVideoPlayer: Close event received";
+    
+    if (!m_isClosing) {
+        m_isClosing = true;
+        
+        // Stop playback
+        if (m_mediaPlayer) {
+            m_mediaPlayer->stop();
+        }
+    }
+    
+    event->accept();
+}
+
+void LightweightVideoPlayer::keyPressEvent(QKeyEvent *event)
+{
+    qDebug() << "LightweightVideoPlayer: Key press event - Key:" << event->key();
+    
+    switch (event->key()) {
+        case Qt::Key_Space:
+            on_playButton_clicked();
+            event->accept();
+            break;
+            
+        case Qt::Key_Right:
+            if (m_mediaPlayer && m_mediaPlayer->hasMedia()) {
+                qint64 newPos = m_mediaPlayer->position() + 10000;
+                setPosition(newPos);
+                event->accept();
+            }
+            break;
+            
+        case Qt::Key_Left:
+            if (m_mediaPlayer && m_mediaPlayer->hasMedia()) {
+                qint64 newPos = m_mediaPlayer->position() - 10000;
+                setPosition(newPos);
+                event->accept();
+            }
+            break;
+            
+        case Qt::Key_Up:
+            setVolume(volume() + 5);
+            event->accept();
+            break;
+            
+        case Qt::Key_Down:
+            setVolume(volume() - 5);
+            event->accept();
+            break;
+            
+        default:
+            QWidget::keyPressEvent(event);
+            break;
+    }
+}
+
+void LightweightVideoPlayer::wheelEvent(QWheelEvent *event)
+{
+    int delta = event->angleDelta().y();
+    
+    if (delta > 0) {
+        setVolume(volume() + 5);
+    } else if (delta < 0) {
+        setVolume(volume() - 5);
+    }
+    
+    event->accept();
+}
+
+bool LightweightVideoPlayer::eventFilter(QObject *watched, QEvent *event)
+{
+    // Handle double-click on video widget
+    if (watched == m_videoWidget && event->type() == QEvent::MouseButtonDblClick) {
+        QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+        if (mouseEvent->button() == Qt::LeftButton) {
+            on_playButton_clicked();
+            return true;
+        }
+    }
+    
+    return QWidget::eventFilter(watched, event);
+}
+
+// Helper methods
+QString LightweightVideoPlayer::formatTime(qint64 milliseconds) const
+{
+    if (milliseconds < 0) {
+        return "00:00";
+    }
+    
+    int hours = milliseconds / 3600000;
+    int minutes = (milliseconds % 3600000) / 60000;
+    int seconds = (milliseconds % 60000) / 1000;
+    
+    if (hours > 0) {
+        return QString("%1:%2:%3")
+            .arg(hours, 2, 10, QChar('0'))
+            .arg(minutes, 2, 10, QChar('0'))
+            .arg(seconds, 2, 10, QChar('0'));
+    } else {
+        return QString("%1:%2")
+            .arg(minutes, 2, 10, QChar('0'))
+            .arg(seconds, 2, 10, QChar('0'));
+    }
+}
