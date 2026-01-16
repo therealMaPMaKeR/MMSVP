@@ -117,6 +117,10 @@ LightweightVideoPlayer::LightweightVideoPlayer(QWidget *parent, int initialVolum
     , m_cursorTimer(nullptr)
     , m_mouseCheckTimer(nullptr)
     , m_lastMousePos(QPoint(-1, -1))
+    , m_messageLabel(nullptr)
+    , m_loopMode(LoopMode::NoLoop)
+    , m_loadPlaybackSpeed(true)
+    , m_currentLoopStateIndex(-1)
 {
     qDebug() << "LightweightVideoPlayer: Constructor called";
     
@@ -224,6 +228,11 @@ void LightweightVideoPlayer::setupUI()
     // Set focus policy
     setFocusPolicy(Qt::StrongFocus);
     m_videoWidget->setFocusPolicy(Qt::StrongFocus);
+    
+    // Create temporary message label
+    m_messageLabel = new TemporaryMessageLabel(this);
+    m_messageLabel->setVisible(false);
+    m_messageLabel->raise();  // Ensure it's on top
     
     // Create controls
     createControls();
@@ -731,6 +740,10 @@ void LightweightVideoPlayer::updatePosition(qint64 position)
     if (m_positionLabel) {
         m_positionLabel->setText(formatTime(position));
     }
+    
+    // Check for loop points
+    checkLoopPoint();
+    
     emit positionChanged(position);
 }
 
@@ -902,8 +915,42 @@ void LightweightVideoPlayer::keyPressEvent(QKeyEvent *event)
         return;
     }
     
-    // Create QKeySequence from the event
-    QKeyCombination combination(event->modifiers(), static_cast<Qt::Key>(event->key()));
+    Qt::Key key = static_cast<Qt::Key>(event->key());
+    Qt::KeyboardModifiers modifiers = event->modifiers();
+    
+    // Get state index from key (1-9, 0, -, =)
+    int stateIndex = getStateIndexFromKey(key);
+    
+    // Handle state-related keybinds (Ctrl/Alt/Shift + number keys)
+    if (stateIndex >= 0) {
+        if (modifiers == Qt::ControlModifier) {
+            // Ctrl + number: Save state
+            savePlaybackState(stateIndex);
+            event->accept();
+            return;
+        }
+        else if (modifiers == Qt::AltModifier) {
+            // Alt + number: Set loop end
+            setLoopEndPosition(stateIndex);
+            event->accept();
+            return;
+        }
+        else if (modifiers == Qt::ShiftModifier) {
+            // Shift + number: Delete state
+            deletePlaybackState(stateIndex);
+            event->accept();
+            return;
+        }
+        else if (modifiers == Qt::NoModifier) {
+            // Plain number: Load state
+            loadPlaybackState(stateIndex);
+            event->accept();
+            return;
+        }
+    }
+    
+    // Create QKeySequence from the event for other keybinds
+    QKeyCombination combination(modifiers, key);
     QKeySequence keySeq(combination);
     
     qDebug() << "LightweightVideoPlayer: Key press event - KeySequence:" << keySeq.toString();
@@ -922,22 +969,8 @@ void LightweightVideoPlayer::keyPressEvent(QKeyEvent *event)
             KeybindManager::Action::VolumeDown,
             KeybindManager::Action::SpeedUp,
             KeybindManager::Action::SpeedDown,
-            KeybindManager::Action::SaveState1,
-            KeybindManager::Action::SaveState2,
-            KeybindManager::Action::SaveState3,
-            KeybindManager::Action::SaveState4,
-            KeybindManager::Action::SaveState5,
-            KeybindManager::Action::SaveState6,
-            KeybindManager::Action::SaveState7,
-            KeybindManager::Action::SaveState8,
-            KeybindManager::Action::LoadState1,
-            KeybindManager::Action::LoadState2,
-            KeybindManager::Action::LoadState3,
-            KeybindManager::Action::LoadState4,
-            KeybindManager::Action::LoadState5,
-            KeybindManager::Action::LoadState6,
-            KeybindManager::Action::LoadState7,
-            KeybindManager::Action::LoadState8
+            KeybindManager::Action::ToggleLoadSpeed,
+            KeybindManager::Action::CycleLoopMode
         };
         
         for (const auto& action : actions) {
@@ -992,83 +1025,13 @@ void LightweightVideoPlayer::keyPressEvent(QKeyEvent *event)
                         handled = true;
                         break;
                         
-                    case KeybindManager::Action::SaveState1:
-                        savePlaybackState(0);
+                    case KeybindManager::Action::ToggleLoadSpeed:
+                        toggleLoadPlaybackSpeed();
                         handled = true;
                         break;
                         
-                    case KeybindManager::Action::SaveState2:
-                        savePlaybackState(1);
-                        handled = true;
-                        break;
-                        
-                    case KeybindManager::Action::SaveState3:
-                        savePlaybackState(2);
-                        handled = true;
-                        break;
-                        
-                    case KeybindManager::Action::SaveState4:
-                        savePlaybackState(3);
-                        handled = true;
-                        break;
-                        
-                    case KeybindManager::Action::SaveState5:
-                        savePlaybackState(4);
-                        handled = true;
-                        break;
-                        
-                    case KeybindManager::Action::SaveState6:
-                        savePlaybackState(5);
-                        handled = true;
-                        break;
-                        
-                    case KeybindManager::Action::SaveState7:
-                        savePlaybackState(6);
-                        handled = true;
-                        break;
-                        
-                    case KeybindManager::Action::SaveState8:
-                        savePlaybackState(7);
-                        handled = true;
-                        break;
-                        
-                    case KeybindManager::Action::LoadState1:
-                        loadPlaybackState(0);
-                        handled = true;
-                        break;
-                        
-                    case KeybindManager::Action::LoadState2:
-                        loadPlaybackState(1);
-                        handled = true;
-                        break;
-                        
-                    case KeybindManager::Action::LoadState3:
-                        loadPlaybackState(2);
-                        handled = true;
-                        break;
-                        
-                    case KeybindManager::Action::LoadState4:
-                        loadPlaybackState(3);
-                        handled = true;
-                        break;
-                        
-                    case KeybindManager::Action::LoadState5:
-                        loadPlaybackState(4);
-                        handled = true;
-                        break;
-                        
-                    case KeybindManager::Action::LoadState6:
-                        loadPlaybackState(5);
-                        handled = true;
-                        break;
-                        
-                    case KeybindManager::Action::LoadState7:
-                        loadPlaybackState(6);
-                        handled = true;
-                        break;
-                        
-                    case KeybindManager::Action::LoadState8:
-                        loadPlaybackState(7);
+                    case KeybindManager::Action::CycleLoopMode:
+                        cycleLoopMode();
                         handled = true;
                         break;
                 }
@@ -1179,7 +1142,7 @@ QString LightweightVideoPlayer::formatTime(qint64 milliseconds) const
 
 void LightweightVideoPlayer::savePlaybackState(int stateIndex)
 {
-    if (stateIndex < 0 || stateIndex >= 8) {
+    if (stateIndex < 0 || stateIndex >= 12) {
         qDebug() << "LightweightVideoPlayer: Invalid state index" << stateIndex;
         return;
     }
@@ -1192,15 +1155,21 @@ void LightweightVideoPlayer::savePlaybackState(int stateIndex)
     qint64 currentPosition = m_mediaPlayer->position();
     qreal currentSpeed = m_mediaPlayer->playbackRate();
     
-    m_playbackStates[stateIndex] = PlaybackState(currentPosition, currentSpeed);
+    // Save the state with start position
+    m_playbackStates[stateIndex].startPosition = currentPosition;
+    m_playbackStates[stateIndex].playbackSpeed = currentSpeed;
+    m_playbackStates[stateIndex].isValid = true;
+    // Keep existing end position if any
     
     qDebug() << "LightweightVideoPlayer: Saved state" << (stateIndex + 1) 
-             << "- Position:" << currentPosition << "ms, Speed:" << currentSpeed << "x";
+             << "- Start Position:" << currentPosition << "ms, Speed:" << currentSpeed << "x";
+    
+    showTemporaryMessage(tr("State %1 Saved").arg(stateIndex + 1));
 }
 
 void LightweightVideoPlayer::loadPlaybackState(int stateIndex)
 {
-    if (stateIndex < 0 || stateIndex >= 8) {
+    if (stateIndex < 0 || stateIndex >= 12) {
         qDebug() << "LightweightVideoPlayer: Invalid state index" << stateIndex;
         return;
     }
@@ -1217,9 +1186,242 @@ void LightweightVideoPlayer::loadPlaybackState(int stateIndex)
     
     const PlaybackState& state = m_playbackStates[stateIndex];
     
-    setPosition(state.position);
-    setPlaybackSpeed(state.playbackSpeed);
+    setPosition(state.startPosition);
+    
+    // Only change playback speed if the option is enabled
+    if (m_loadPlaybackSpeed) {
+        setPlaybackSpeed(state.playbackSpeed);
+    }
+    
+    // Track current state for looping
+    m_currentLoopStateIndex = stateIndex;
     
     qDebug() << "LightweightVideoPlayer: Loaded state" << (stateIndex + 1) 
-             << "- Position:" << state.position << "ms, Speed:" << state.playbackSpeed << "x";
+             << "- Start Position:" << state.startPosition << "ms";
+    if (m_loadPlaybackSpeed) {
+        qDebug() << "  Speed:" << state.playbackSpeed << "x";
+    }
+    
+    showTemporaryMessage(tr("State %1 Loaded").arg(stateIndex + 1));
+}
+
+void LightweightVideoPlayer::setLoopEndPosition(int stateIndex)
+{
+    if (stateIndex < 0 || stateIndex >= 12) {
+        qDebug() << "LightweightVideoPlayer: Invalid state index" << stateIndex;
+        return;
+    }
+    
+    if (!m_playbackStates[stateIndex].isValid) {
+        qDebug() << "LightweightVideoPlayer: State" << (stateIndex + 1) << "does not exist, cannot set loop end";
+        showTemporaryMessage(tr("State %1 does not exist").arg(stateIndex + 1));
+        return;
+    }
+    
+    if (!m_mediaPlayer || !m_mediaPlayer->hasMedia()) {
+        qDebug() << "LightweightVideoPlayer: No media loaded, cannot set loop end";
+        return;
+    }
+    
+    qint64 currentPosition = m_mediaPlayer->position();
+    
+    // Make sure end position is after start position
+    if (currentPosition <= m_playbackStates[stateIndex].startPosition) {
+        qDebug() << "LightweightVideoPlayer: End position must be after start position";
+        showTemporaryMessage(tr("Loop end must be after start"));
+        return;
+    }
+    
+    m_playbackStates[stateIndex].endPosition = currentPosition;
+    m_playbackStates[stateIndex].hasEndPosition = true;
+    
+    qDebug() << "LightweightVideoPlayer: Set loop end for state" << (stateIndex + 1)
+             << "- End Position:" << currentPosition << "ms";
+    
+    showTemporaryMessage(tr("State %1 Loop End Set").arg(stateIndex + 1));
+}
+
+void LightweightVideoPlayer::deletePlaybackState(int stateIndex)
+{
+    if (stateIndex < 0 || stateIndex >= 12) {
+        qDebug() << "LightweightVideoPlayer: Invalid state index" << stateIndex;
+        return;
+    }
+    
+    // Clear the state completely
+    m_playbackStates[stateIndex] = PlaybackState();
+    
+    qDebug() << "LightweightVideoPlayer: Deleted state" << (stateIndex + 1);
+    showTemporaryMessage(tr("State %1 Deleted").arg(stateIndex + 1));
+}
+
+void LightweightVideoPlayer::toggleLoadPlaybackSpeed()
+{
+    m_loadPlaybackSpeed = !m_loadPlaybackSpeed;
+    
+    QString status = m_loadPlaybackSpeed ? tr("ON") : tr("OFF");
+    qDebug() << "LightweightVideoPlayer: Load Playback Speed toggled to" << status;
+    
+    showTemporaryMessage(tr("Load Speed: %1").arg(status));
+}
+
+void LightweightVideoPlayer::cycleLoopMode()
+{
+    switch (m_loopMode) {
+        case LoopMode::NoLoop:
+            m_loopMode = LoopMode::LoopSingle;
+            break;
+        case LoopMode::LoopSingle:
+            m_loopMode = LoopMode::LoopAll;
+            break;
+        case LoopMode::LoopAll:
+            m_loopMode = LoopMode::NoLoop;
+            m_currentLoopStateIndex = -1;  // Reset tracking
+            break;
+    }
+    
+    QString modeStr = getLoopModeString();
+    qDebug() << "LightweightVideoPlayer: Loop mode changed to" << modeStr;
+    
+    showTemporaryMessage(tr("Loop Mode: %1").arg(modeStr));
+}
+
+void LightweightVideoPlayer::checkLoopPoint()
+{
+    if (m_loopMode == LoopMode::NoLoop || !m_mediaPlayer || !m_mediaPlayer->hasMedia()) {
+        return;
+    }
+    
+    qint64 currentPosition = m_mediaPlayer->position();
+    const int tolerance = 200;  // 200ms tolerance
+    
+    if (m_loopMode == LoopMode::LoopSingle) {
+        // Check if current loaded state has reached its end point
+        if (m_currentLoopStateIndex >= 0 && m_currentLoopStateIndex < 12) {
+            const PlaybackState& state = m_playbackStates[m_currentLoopStateIndex];
+            
+            if (state.isValid && state.hasEndPosition) {
+                // Check if we've reached or passed the end position
+                if (currentPosition >= state.endPosition - tolerance) {
+                    qDebug() << "LightweightVideoPlayer: Loop point reached for state" << (m_currentLoopStateIndex + 1);
+                    setPosition(state.startPosition);
+                }
+            }
+        }
+    }
+    else if (m_loopMode == LoopMode::LoopAll) {
+        // Check if current state has reached its end, then move to next loopable state
+        if (m_currentLoopStateIndex >= 0 && m_currentLoopStateIndex < 12) {
+            const PlaybackState& currentState = m_playbackStates[m_currentLoopStateIndex];
+            
+            if (currentState.isValid && currentState.hasEndPosition) {
+                if (currentPosition >= currentState.endPosition - tolerance) {
+                    // Find next valid loopable state
+                    int nextStateIndex = (m_currentLoopStateIndex + 1) % 12;
+                    int searchCount = 0;
+                    
+                    while (searchCount < 12) {
+                        if (m_playbackStates[nextStateIndex].isValid && 
+                            m_playbackStates[nextStateIndex].hasEndPosition) {
+                            // Found next loopable state
+                            qDebug() << "LightweightVideoPlayer: Moving to next loop state" << (nextStateIndex + 1);
+                            loadPlaybackState(nextStateIndex);
+                            return;
+                        }
+                        
+                        nextStateIndex = (nextStateIndex + 1) % 12;
+                        searchCount++;
+                    }
+                    
+                    // No more loopable states found, go back to first loopable state
+                    for (int i = 0; i < 12; i++) {
+                        if (m_playbackStates[i].isValid && m_playbackStates[i].hasEndPosition) {
+                            qDebug() << "LightweightVideoPlayer: Looping back to first state" << (i + 1);
+                            loadPlaybackState(i);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+int LightweightVideoPlayer::getStateIndexFromKey(Qt::Key key) const
+{
+    // Map keys to state indices (1-9, 0, -, =)
+    switch (key) {
+        case Qt::Key_1: return 0;
+        case Qt::Key_2: return 1;
+        case Qt::Key_3: return 2;
+        case Qt::Key_4: return 3;
+        case Qt::Key_5: return 4;
+        case Qt::Key_6: return 5;
+        case Qt::Key_7: return 6;
+        case Qt::Key_8: return 7;
+        case Qt::Key_9: return 8;
+        case Qt::Key_0: return 9;
+        case Qt::Key_Minus: return 10;
+        case Qt::Key_Equal: return 11;
+        default: return -1;  // Not a state key
+    }
+}
+
+QString LightweightVideoPlayer::getLoopModeString() const
+{
+    switch (m_loopMode) {
+        case LoopMode::NoLoop:
+            return tr("No Loop");
+        case LoopMode::LoopSingle:
+            return tr("Loop Single");
+        case LoopMode::LoopAll:
+            return tr("Loop All");
+        default:
+            return tr("Unknown");
+    }
+}
+
+void LightweightVideoPlayer::showTemporaryMessage(const QString& message)
+{
+    if (m_messageLabel) {
+        m_messageLabel->showMessage(message, 2000);
+    }
+}
+
+// TemporaryMessageLabel implementation
+TemporaryMessageLabel::TemporaryMessageLabel(QWidget* parent)
+    : QLabel(parent)
+    , m_fadeTimer(new QTimer(this))
+{
+    setAlignment(Qt::AlignCenter);
+    setStyleSheet(
+        "QLabel {"
+        "    background-color: rgba(0, 0, 0, 180);"
+        "    color: white;"
+        "    font-size: 24px;"
+        "    font-weight: bold;"
+        "    padding: 20px;"
+        "    border-radius: 10px;"
+        "}"
+    );
+    
+    m_fadeTimer->setSingleShot(true);
+    connect(m_fadeTimer, &QTimer::timeout, this, &TemporaryMessageLabel::hide);
+}
+
+void TemporaryMessageLabel::showMessage(const QString& message, int durationMs)
+{
+    setText(message);
+    adjustSize();
+    
+    // Center the label in parent
+    if (parentWidget()) {
+        QRect parentRect = parentWidget()->rect();
+        move((parentRect.width() - width()) / 2, (parentRect.height() - height()) / 2);
+    }
+    
+    setVisible(true);
+    raise();  // Bring to front
+    
+    m_fadeTimer->start(durationMs);
 }

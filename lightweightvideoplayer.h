@@ -19,6 +19,9 @@
 #include "vp_vlcplayer.h"
 #include "keybindmanager.h"
 
+// Forward declaration
+class TemporaryMessageLabel;
+
 /**
  * @class LightweightVideoPlayer
  * @brief Lightweight video player with essential playback features including fullscreen
@@ -152,23 +155,58 @@ protected:
     // Keybind manager
     std::unique_ptr<KeybindManager> m_keybindManager;
     
-    // Playback state system
-    struct PlaybackState {
-        qint64 position;
-        qreal playbackSpeed;
-        bool isValid;
-        
-        PlaybackState() : position(0), playbackSpeed(1.0), isValid(false) {}
-        PlaybackState(qint64 pos, qreal speed) : position(pos), playbackSpeed(speed), isValid(true) {}
+    // Temporary message display
+    TemporaryMessageLabel* m_messageLabel;
+    
+    // Loop mode enumeration
+    enum class LoopMode {
+        NoLoop,
+        LoopSingle,
+        LoopAll
     };
     
-    PlaybackState m_playbackStates[8];
+    // Playback state system
+    struct PlaybackState {
+        qint64 startPosition;
+        qint64 endPosition;
+        qreal playbackSpeed;
+        bool isValid;
+        bool hasEndPosition;
+        
+        PlaybackState() : startPosition(0), endPosition(0), playbackSpeed(1.0), isValid(false), hasEndPosition(false) {}
+        PlaybackState(qint64 start, qreal speed) : startPosition(start), endPosition(0), playbackSpeed(speed), isValid(true), hasEndPosition(false) {}
+    };
+    
+    PlaybackState m_playbackStates[12];  // 12 states for keys 1,2,3,4,5,6,7,8,9,0,-,=
+    LoopMode m_loopMode;
+    bool m_loadPlaybackSpeed;
+    int m_currentLoopStateIndex;  // Track which state is currently looping
     
 private:
     void initializePlayer();
     void openKeybindEditor();
     void savePlaybackState(int stateIndex);
+    void setLoopEndPosition(int stateIndex);
     void loadPlaybackState(int stateIndex);
+    void deletePlaybackState(int stateIndex);
+    void toggleLoadPlaybackSpeed();
+    void cycleLoopMode();
+    void checkLoopPoint();
+    int getStateIndexFromKey(Qt::Key key) const;
+    QString getLoopModeString() const;
+    void showTemporaryMessage(const QString& message);
+};
+
+// Temporary message label overlay
+class TemporaryMessageLabel : public QLabel
+{
+    Q_OBJECT
+public:
+    explicit TemporaryMessageLabel(QWidget* parent = nullptr);
+    void showMessage(const QString& message, int durationMs = 2000);
+
+private:
+    QTimer* m_fadeTimer;
 };
 
 #endif // LIGHTWEIGHTVIDEOPLAYER_H

@@ -142,38 +142,16 @@ QString KeybindManager::actionToString(Action action)
             return "Speed Up";
         case Action::SpeedDown:
             return "Speed Down";
-        case Action::SaveState1:
-            return "Save State 1";
-        case Action::SaveState2:
-            return "Save State 2";
-        case Action::SaveState3:
-            return "Save State 3";
-        case Action::SaveState4:
-            return "Save State 4";
-        case Action::SaveState5:
-            return "Save State 5";
-        case Action::SaveState6:
-            return "Save State 6";
-        case Action::SaveState7:
-            return "Save State 7";
-        case Action::SaveState8:
-            return "Save State 8";
-        case Action::LoadState1:
-            return "Load State 1";
-        case Action::LoadState2:
-            return "Load State 2";
-        case Action::LoadState3:
-            return "Load State 3";
-        case Action::LoadState4:
-            return "Load State 4";
-        case Action::LoadState5:
-            return "Load State 5";
-        case Action::LoadState6:
-            return "Load State 6";
-        case Action::LoadState7:
-            return "Load State 7";
-        case Action::LoadState8:
-            return "Load State 8";
+        case Action::SaveState:
+            return "Save State (Ctrl+Num)";
+        case Action::SetLoopEnd:
+            return "Set Loop End (Alt+Num)";
+        case Action::DeleteState:
+            return "Delete State (Shift+Num)";
+        case Action::ToggleLoadSpeed:
+            return "Toggle Load Speed";
+        case Action::CycleLoopMode:
+            return "Cycle Loop Mode";
         default:
             return "Unknown";
     }
@@ -208,53 +186,20 @@ QList<QKeySequence> KeybindManager::getDefaultKeybinds(Action action)
         case Action::SpeedDown:
             defaults << QKeySequence(Qt::CTRL | Qt::Key_Left);
             break;
-        case Action::SaveState1:
-            defaults << QKeySequence(Qt::CTRL | Qt::Key_F1);
+        case Action::SaveState:
+            defaults << QKeySequence(Qt::CTRL | Qt::Key_1);  // Example, user uses Ctrl+any number
             break;
-        case Action::SaveState2:
-            defaults << QKeySequence(Qt::CTRL | Qt::Key_F2);
+        case Action::SetLoopEnd:
+            defaults << QKeySequence(Qt::ALT | Qt::Key_1);   // Example, user uses Alt+any number
             break;
-        case Action::SaveState3:
-            defaults << QKeySequence(Qt::CTRL | Qt::Key_F3);
+        case Action::DeleteState:
+            defaults << QKeySequence(Qt::SHIFT | Qt::Key_1); // Example, user uses Shift+any number
             break;
-        case Action::SaveState4:
-            defaults << QKeySequence(Qt::CTRL | Qt::Key_F4);
-            break;
-        case Action::SaveState5:
-            defaults << QKeySequence(Qt::CTRL | Qt::Key_F5);
-            break;
-        case Action::SaveState6:
-            defaults << QKeySequence(Qt::CTRL | Qt::Key_F6);
-            break;
-        case Action::SaveState7:
-            defaults << QKeySequence(Qt::CTRL | Qt::Key_F7);
-            break;
-        case Action::SaveState8:
-            defaults << QKeySequence(Qt::CTRL | Qt::Key_F8);
-            break;
-        case Action::LoadState1:
-            defaults << QKeySequence(Qt::Key_F1);
-            break;
-        case Action::LoadState2:
-            defaults << QKeySequence(Qt::Key_F2);
-            break;
-        case Action::LoadState3:
-            defaults << QKeySequence(Qt::Key_F3);
-            break;
-        case Action::LoadState4:
-            defaults << QKeySequence(Qt::Key_F4);
-            break;
-        case Action::LoadState5:
+        case Action::ToggleLoadSpeed:
             defaults << QKeySequence(Qt::Key_F5);
             break;
-        case Action::LoadState6:
-            defaults << QKeySequence(Qt::Key_F6);
-            break;
-        case Action::LoadState7:
-            defaults << QKeySequence(Qt::Key_F7);
-            break;
-        case Action::LoadState8:
-            defaults << QKeySequence(Qt::Key_F8);
+        case Action::CycleLoopMode:
+            defaults << QKeySequence(Qt::Key_F9);
             break;
     }
     
@@ -276,22 +221,11 @@ void KeybindManager::resetToDefaults()
     m_keybinds[Action::VolumeDown] = getDefaultKeybinds(Action::VolumeDown);
     m_keybinds[Action::SpeedUp] = getDefaultKeybinds(Action::SpeedUp);
     m_keybinds[Action::SpeedDown] = getDefaultKeybinds(Action::SpeedDown);
-    m_keybinds[Action::SaveState1] = getDefaultKeybinds(Action::SaveState1);
-    m_keybinds[Action::SaveState2] = getDefaultKeybinds(Action::SaveState2);
-    m_keybinds[Action::SaveState3] = getDefaultKeybinds(Action::SaveState3);
-    m_keybinds[Action::SaveState4] = getDefaultKeybinds(Action::SaveState4);
-    m_keybinds[Action::SaveState5] = getDefaultKeybinds(Action::SaveState5);
-    m_keybinds[Action::SaveState6] = getDefaultKeybinds(Action::SaveState6);
-    m_keybinds[Action::SaveState7] = getDefaultKeybinds(Action::SaveState7);
-    m_keybinds[Action::SaveState8] = getDefaultKeybinds(Action::SaveState8);
-    m_keybinds[Action::LoadState1] = getDefaultKeybinds(Action::LoadState1);
-    m_keybinds[Action::LoadState2] = getDefaultKeybinds(Action::LoadState2);
-    m_keybinds[Action::LoadState3] = getDefaultKeybinds(Action::LoadState3);
-    m_keybinds[Action::LoadState4] = getDefaultKeybinds(Action::LoadState4);
-    m_keybinds[Action::LoadState5] = getDefaultKeybinds(Action::LoadState5);
-    m_keybinds[Action::LoadState6] = getDefaultKeybinds(Action::LoadState6);
-    m_keybinds[Action::LoadState7] = getDefaultKeybinds(Action::LoadState7);
-    m_keybinds[Action::LoadState8] = getDefaultKeybinds(Action::LoadState8);
+    m_keybinds[Action::SaveState] = getDefaultKeybinds(Action::SaveState);
+    m_keybinds[Action::SetLoopEnd] = getDefaultKeybinds(Action::SetLoopEnd);
+    m_keybinds[Action::DeleteState] = getDefaultKeybinds(Action::DeleteState);
+    m_keybinds[Action::ToggleLoadSpeed] = getDefaultKeybinds(Action::ToggleLoadSpeed);
+    m_keybinds[Action::CycleLoopMode] = getDefaultKeybinds(Action::CycleLoopMode);
     
     emit keybindsChanged();
 }
@@ -326,22 +260,11 @@ bool KeybindManager::saveKeybinds()
         Action::VolumeDown,
         Action::SpeedUp,
         Action::SpeedDown,
-        Action::SaveState1,
-        Action::SaveState2,
-        Action::SaveState3,
-        Action::SaveState4,
-        Action::SaveState5,
-        Action::SaveState6,
-        Action::SaveState7,
-        Action::SaveState8,
-        Action::LoadState1,
-        Action::LoadState2,
-        Action::LoadState3,
-        Action::LoadState4,
-        Action::LoadState5,
-        Action::LoadState6,
-        Action::LoadState7,
-        Action::LoadState8
+        Action::SaveState,
+        Action::SetLoopEnd,
+        Action::DeleteState,
+        Action::ToggleLoadSpeed,
+        Action::CycleLoopMode
     };
     
     for (Action action : actions) {
@@ -388,22 +311,11 @@ bool KeybindManager::loadKeybinds()
     actionMap["VolumeDown"] = Action::VolumeDown;
     actionMap["SpeedUp"] = Action::SpeedUp;
     actionMap["SpeedDown"] = Action::SpeedDown;
-    actionMap["SaveState1"] = Action::SaveState1;
-    actionMap["SaveState2"] = Action::SaveState2;
-    actionMap["SaveState3"] = Action::SaveState3;
-    actionMap["SaveState4"] = Action::SaveState4;
-    actionMap["SaveState5"] = Action::SaveState5;
-    actionMap["SaveState6"] = Action::SaveState6;
-    actionMap["SaveState7"] = Action::SaveState7;
-    actionMap["SaveState8"] = Action::SaveState8;
-    actionMap["LoadState1"] = Action::LoadState1;
-    actionMap["LoadState2"] = Action::LoadState2;
-    actionMap["LoadState3"] = Action::LoadState3;
-    actionMap["LoadState4"] = Action::LoadState4;
-    actionMap["LoadState5"] = Action::LoadState5;
-    actionMap["LoadState6"] = Action::LoadState6;
-    actionMap["LoadState7"] = Action::LoadState7;
-    actionMap["LoadState8"] = Action::LoadState8;
+    actionMap["SaveState(Ctrl+Num)"] = Action::SaveState;
+    actionMap["SetLoopEnd(Alt+Num)"] = Action::SetLoopEnd;
+    actionMap["DeleteState(Shift+Num)"] = Action::DeleteState;
+    actionMap["ToggleLoadSpeed"] = Action::ToggleLoadSpeed;
+    actionMap["CycleLoopMode"] = Action::CycleLoopMode;
     
     int lineNumber = 0;
     while (!in.atEnd()) {
@@ -458,7 +370,7 @@ bool KeybindManager::loadKeybinds()
     file.close();
     
     // Verify that all actions have been loaded
-    if (m_keybinds.size() != 24) {
+    if (m_keybinds.size() != 13) {
         qWarning() << "KeybindManager: Not all actions were loaded from file";
         return false;
     }
