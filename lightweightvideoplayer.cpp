@@ -918,40 +918,65 @@ void LightweightVideoPlayer::keyPressEvent(QKeyEvent *event)
     Qt::Key key = static_cast<Qt::Key>(event->key());
     Qt::KeyboardModifiers modifiers = event->modifiers();
     
+    // Normalize shifted keys back to their base keys for state detection
+    // When Shift is pressed with number keys, Qt reports the shifted character
+    Qt::Key normalizedKey = key;
+    if (modifiers & Qt::ShiftModifier) {
+        switch (key) {
+            case Qt::Key_Exclam:       normalizedKey = Qt::Key_1; break;  // !
+            case Qt::Key_At:           normalizedKey = Qt::Key_2; break;  // @
+            case Qt::Key_NumberSign:   normalizedKey = Qt::Key_3; break;  // #
+            case Qt::Key_Dollar:       normalizedKey = Qt::Key_4; break;  // $
+            case Qt::Key_Percent:      normalizedKey = Qt::Key_5; break;  // %
+            case Qt::Key_AsciiCircum:  normalizedKey = Qt::Key_6; break;  // ^
+            case Qt::Key_Ampersand:    normalizedKey = Qt::Key_7; break;  // &
+            case Qt::Key_Asterisk:     normalizedKey = Qt::Key_8; break;  // *
+            case Qt::Key_ParenLeft:    normalizedKey = Qt::Key_9; break;  // (
+            case Qt::Key_ParenRight:   normalizedKey = Qt::Key_0; break;  // )
+            case Qt::Key_Underscore:   normalizedKey = Qt::Key_Minus; break;  // _
+            case Qt::Key_Plus:         normalizedKey = Qt::Key_Equal; break;  // +
+            default: break;
+        }
+    }
+    
     // Create QKeySequence from the event
     QKeyCombination combination(modifiers, key);
     QKeySequence keySeq(combination);
     
     // Check if this is a state key without modifiers (from the customizable StateKeys list)
-    QKeySequence baseKeySeq(key);
+    QKeySequence baseKeySeq(normalizedKey);
     int baseStateIndex = getStateIndexFromKeySequence(baseKeySeq);
     
+    // Also check using the direct key mapping for modifier combinations
+    int directStateIndex = getStateIndexFromKey(normalizedKey);
+    
     // Handle state-related keybinds
-    if (baseStateIndex >= 0) {
+    if (directStateIndex >= 0 && modifiers != Qt::NoModifier) {
+        // Use direct state index for modifier combinations
         if (modifiers == Qt::ControlModifier) {
             // Ctrl + state key: Save state
-            savePlaybackState(baseStateIndex);
+            savePlaybackState(directStateIndex);
             event->accept();
             return;
         }
         else if (modifiers == Qt::AltModifier) {
             // Alt + state key: Set loop end
-            setLoopEndPosition(baseStateIndex);
+            setLoopEndPosition(directStateIndex);
             event->accept();
             return;
         }
         else if (modifiers == Qt::ShiftModifier) {
             // Shift + state key: Delete state
-            deletePlaybackState(baseStateIndex);
+            deletePlaybackState(directStateIndex);
             event->accept();
             return;
         }
-        else if (modifiers == Qt::NoModifier) {
-            // Plain state key: Load state
-            loadPlaybackState(baseStateIndex);
-            event->accept();
-            return;
-        }
+    }
+    else if (baseStateIndex >= 0 && modifiers == Qt::NoModifier) {
+        // Plain state key without modifiers: Load state
+        loadPlaybackState(baseStateIndex);
+        event->accept();
+        return;
     }
     
     qDebug() << "LightweightVideoPlayer: Key press event - KeySequence:" << keySeq.toString();
