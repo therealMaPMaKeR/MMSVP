@@ -7,6 +7,10 @@
 #include <QCloseEvent>
 #include <QApplication>
 #include <QDoubleSpinBox>
+#include <QScreen>
+#include <QCursor>
+#include <QScreen>
+#include <QCursor>
 
 // Custom clickable slider class for seeking in video
 class LightweightVideoPlayer::ClickableSlider : public QSlider
@@ -91,6 +95,7 @@ LightweightVideoPlayer::LightweightVideoPlayer(QWidget *parent, int initialVolum
     , m_videoWidget(nullptr)
     , m_playButton(nullptr)
     , m_stopButton(nullptr)
+    , m_fullScreenButton(nullptr)
     , m_positionSlider(nullptr)
     , m_volumeSlider(nullptr)
     , m_speedSpinBox(nullptr)
@@ -103,10 +108,17 @@ LightweightVideoPlayer::LightweightVideoPlayer(QWidget *parent, int initialVolum
     , m_controlLayout(nullptr)
     , m_sliderLayout(nullptr)
     , m_isSliderBeingMoved(false)
+    , m_isFullScreen(false)
     , m_isClosing(false)
     , m_playbackStartedEmitted(false)
+    , m_cursorTimer(nullptr)
+    , m_mouseCheckTimer(nullptr)
+    , m_lastMousePos(QPoint(-1, -1))
 {
     qDebug() << "LightweightVideoPlayer: Constructor called";
+    
+    // Enable mouse tracking for auto-hide cursor functionality
+    setMouseTracking(true);
     
     // Set window properties
     setWindowTitle(tr("Lightweight Video Player"));
@@ -130,6 +142,17 @@ LightweightVideoPlayer::LightweightVideoPlayer(QWidget *parent, int initialVolum
 LightweightVideoPlayer::~LightweightVideoPlayer()
 {
     qDebug() << "LightweightVideoPlayer: Destructor called";
+    
+    // Stop timers
+    if (m_cursorTimer) {
+        m_cursorTimer->stop();
+        delete m_cursorTimer;
+    }
+    
+    if (m_mouseCheckTimer) {
+        m_mouseCheckTimer->stop();
+        delete m_mouseCheckTimer;
+    }
     
     // Stop media player
     if (m_mediaPlayer) {
@@ -156,6 +179,15 @@ void LightweightVideoPlayer::initializePlayer()
     // Connect signals
     connectSignals();
     
+    // Initialize cursor timers for fullscreen auto-hide
+    m_cursorTimer = new QTimer(this);
+    m_cursorTimer->setSingleShot(true);
+    connect(m_cursorTimer, &QTimer::timeout, this, &LightweightVideoPlayer::hideCursor);
+
+    m_mouseCheckTimer = new QTimer(this);
+    m_mouseCheckTimer->setInterval(100);
+    connect(m_mouseCheckTimer, &QTimer::timeout, this, &LightweightVideoPlayer::checkMouseMovement);
+    
     qDebug() << "LightweightVideoPlayer: Initialization complete";
 }
 
@@ -174,6 +206,9 @@ void LightweightVideoPlayer::setupUI()
     
     m_videoWidget->show();
     m_videoWidget->installEventFilter(this);
+    
+    // Enable mouse tracking on video widget too
+    m_videoWidget->setMouseTracking(true);
     
     // Set focus policy
     setFocusPolicy(Qt::StrongFocus);
@@ -207,10 +242,16 @@ void LightweightVideoPlayer::createControls()
     m_stopButton->setToolTip(tr("Stop"));
     m_stopButton->setFocusPolicy(Qt::NoFocus);
     
+    // Fullscreen button
+    m_fullScreenButton = new QPushButton(this);
+    m_fullScreenButton->setIcon(style()->standardIcon(QStyle::SP_TitleBarMaxButton));
+    m_fullScreenButton->setToolTip(tr("Full Screen (F11)"));
+    m_fullScreenButton->setFocusPolicy(Qt::NoFocus);
+    
     // Position slider
     m_positionSlider = createClickableSlider();
     m_positionSlider->setRange(0, 0);
-    m_positionSlider->setToolTip(tr("Click to seek"));
+    m_positionSlider->setToolTip(tr("Click to seek\nLeft/Right: Seek 10s"));
     m_positionSlider->setFocusPolicy(Qt::ClickFocus);
     
     // Volume slider
@@ -218,7 +259,7 @@ void LightweightVideoPlayer::createControls()
     m_volumeSlider->setRange(0, 200);
     m_volumeSlider->setValue(70);
     m_volumeSlider->setMaximumWidth(100);
-    m_volumeSlider->setToolTip(tr("Volume (up to 200%)"));
+    m_volumeSlider->setToolTip(tr("Volume (up to 200%)\nUp/Down: Adjust volume\nMouse Wheel: Adjust volume"));
     m_volumeSlider->setFocusPolicy(Qt::ClickFocus);
     
     // Speed spin box
@@ -251,6 +292,7 @@ void LightweightVideoPlayer::createLayouts()
     m_controlLayout = new QHBoxLayout();
     m_controlLayout->addWidget(m_playButton);
     m_controlLayout->addWidget(m_stopButton);
+    m_controlLayout->addWidget(m_fullScreenButton);
     m_controlLayout->addStretch();
     
     // Slider layout (position, volume, and speed)
@@ -267,6 +309,9 @@ void LightweightVideoPlayer::createLayouts()
     
     // Controls widget layout
     m_controlsWidget = new QWidget(this);
+    m_controlsWidget->setMouseTracking(true);
+    m_controlsWidget->installEventFilter(this);
+    
     QVBoxLayout* controlsLayout = new QVBoxLayout(m_controlsWidget);
     controlsLayout->addLayout(m_controlLayout);
     controlsLayout->addLayout(m_sliderLayout);
@@ -276,6 +321,9 @@ void LightweightVideoPlayer::createLayouts()
     m_mainLayout = new QVBoxLayout(this);
     m_mainLayout->addWidget(m_videoWidget, 1);
     m_mainLayout->addWidget(m_controlsWidget);
+    
+    // Store normal margins for restoration later
+    m_normalMargins = m_mainLayout->contentsMargins();
     
     setLayout(m_mainLayout);
 }
@@ -293,6 +341,11 @@ void LightweightVideoPlayer::connectSignals()
     if (m_stopButton) {
         connect(m_stopButton, &QPushButton::clicked,
                 this, &LightweightVideoPlayer::stop);
+    }
+    
+    if (m_fullScreenButton) {
+        connect(m_fullScreenButton, &QPushButton::clicked,
+                this, &LightweightVideoPlayer::on_fullScreenButton_clicked);
     }
     
     // Slider signals
@@ -477,6 +530,93 @@ void LightweightVideoPlayer::setPlaybackSpeed(qreal speed)
     emit playbackSpeedChanged(speed);
 }
 
+void LightweightVideoPlayer::toggleFullScreen()
+{
+    if (m_isFullScreen) {
+        exitFullScreen();
+    } else {
+        enterFullScreen();
+    }
+}
+
+void LightweightVideoPlayer::enterFullScreen()
+{
+    if (!m_isFullScreen) {
+        qDebug() << "LightweightVideoPlayer: Entering fullscreen mode";
+        
+        // Store normal geometry before going fullscreen
+        m_normalGeometry = geometry();
+        
+        // Show fullscreen
+        showFullScreen();
+        
+        // Remove margins in fullscreen
+        m_mainLayout->setContentsMargins(0, 0, 0, 0);
+        
+        // Set fullscreen flag BEFORE starting timers
+        m_isFullScreen = true;
+        
+        // Initialize mouse position to current cursor position
+        m_lastMousePos = QCursor::pos();
+        qDebug() << "LightweightVideoPlayer: Initialized mouse position to" << m_lastMousePos;
+        
+        // Start timer to auto-hide controls
+        startCursorTimer();
+        m_mouseCheckTimer->start();
+        
+        // Update button icon
+        if (m_fullScreenButton) {
+            m_fullScreenButton->setIcon(style()->standardIcon(QStyle::SP_TitleBarNormalButton));
+            m_fullScreenButton->setToolTip(tr("Exit Full Screen (F11/Esc)"));
+        }
+        
+        emit fullScreenChanged(true);
+    }
+}
+
+void LightweightVideoPlayer::exitFullScreen()
+{
+    if (m_isFullScreen) {
+        qDebug() << "LightweightVideoPlayer: Exiting fullscreen mode";
+        
+        // Stop cursor hide timers
+        stopCursorTimer();
+        m_mouseCheckTimer->stop();
+        
+        // Reset mouse position tracking
+        m_lastMousePos = QPoint(-1, -1);
+        
+        // Show cursor and controls
+        showCursor();
+        m_controlsWidget->setVisible(true);
+        
+        // Restore margins
+        m_mainLayout->setContentsMargins(m_normalMargins);
+        
+        // Exit fullscreen mode
+        showNormal();
+        
+        // Restore geometry
+        if (!m_normalGeometry.isEmpty()) {
+            setGeometry(m_normalGeometry);
+        }
+        
+        // Ensure window is raised and active
+        raise();
+        activateWindow();
+        
+        m_isFullScreen = false;
+        
+        // Update button icon
+        if (m_fullScreenButton) {
+            m_fullScreenButton->setIcon(style()->standardIcon(QStyle::SP_TitleBarMaxButton));
+            m_fullScreenButton->setToolTip(tr("Full Screen (F11)"));
+        }
+        
+        emit fullScreenChanged(false);
+    }
+}
+
 // State query functions
 bool LightweightVideoPlayer::isPlaying() const
 {
@@ -523,6 +663,12 @@ void LightweightVideoPlayer::on_playButton_clicked()
     } else {
         play();
     }
+}
+
+void LightweightVideoPlayer::on_fullScreenButton_clicked()
+{
+    qDebug() << "LightweightVideoPlayer: Fullscreen button clicked";
+    toggleFullScreen();
 }
 
 void LightweightVideoPlayer::on_positionSlider_sliderMoved(int position)
@@ -630,6 +776,74 @@ void LightweightVideoPlayer::handleVideoFinished()
     emit finished();
 }
 
+// Cursor management
+void LightweightVideoPlayer::hideCursor()
+{
+    if (m_isFullScreen) {
+        setCursor(Qt::BlankCursor);
+        m_videoWidget->setCursor(Qt::BlankCursor);
+        m_controlsWidget->setVisible(false);
+        qDebug() << "LightweightVideoPlayer: Cursor and controls hidden";
+    }
+}
+
+void LightweightVideoPlayer::showCursor()
+{
+    setCursor(Qt::ArrowCursor);
+    m_videoWidget->setCursor(Qt::ArrowCursor);
+    qDebug() << "LightweightVideoPlayer: Cursor shown";
+}
+
+void LightweightVideoPlayer::checkMouseMovement()
+{
+    if (!m_isFullScreen) {
+        return;
+    }
+    
+    QPoint currentPos = QCursor::pos();
+    
+    // Check if this is the first check (initialization)
+    if (m_lastMousePos == QPoint(-1, -1)) {
+        // First time checking - initialize position but don't show controls
+        m_lastMousePos = currentPos;
+        qDebug() << "LightweightVideoPlayer: Initial mouse position set to" << currentPos;
+        return;
+    }
+    
+    // Check if mouse has moved
+    if (m_lastMousePos != currentPos) {
+        qDebug() << "LightweightVideoPlayer: Mouse movement detected from"
+                  << m_lastMousePos << "to" << currentPos;
+        
+        // Show cursor and controls
+        showCursor();
+        
+        if (!m_controlsWidget->isVisible()) {
+            m_controlsWidget->setVisible(true);
+        }
+        
+        // Restart the hide timer
+        startCursorTimer();
+    }
+    
+    m_lastMousePos = currentPos;
+}
+
+void LightweightVideoPlayer::startCursorTimer()
+{
+    if (m_isFullScreen && m_cursorTimer) {
+        m_cursorTimer->stop();
+        m_cursorTimer->start(3000);  // Hide after 3 seconds
+    }
+}
+
+void LightweightVideoPlayer::stopCursorTimer()
+{
+    if (m_cursorTimer) {
+        m_cursorTimer->stop();
+    }
+}
+
 // Event handlers
 void LightweightVideoPlayer::closeEvent(QCloseEvent *event)
 {
@@ -655,6 +869,20 @@ void LightweightVideoPlayer::keyPressEvent(QKeyEvent *event)
         case Qt::Key_Space:
             on_playButton_clicked();
             event->accept();
+            break;
+            
+        case Qt::Key_F11:
+            toggleFullScreen();
+            event->accept();
+            break;
+            
+        case Qt::Key_Escape:
+            if (m_isFullScreen) {
+                exitFullScreen();
+                event->accept();
+            } else {
+                QWidget::keyPressEvent(event);
+            }
             break;
             
         case Qt::Key_Right:
@@ -702,14 +930,42 @@ void LightweightVideoPlayer::wheelEvent(QWheelEvent *event)
     event->accept();
 }
 
+void LightweightVideoPlayer::mouseMoveEvent(QMouseEvent *event)
+{
+    Q_UNUSED(event)
+    
+    if (m_isFullScreen) {
+        // Show cursor and controls
+        showCursor();
+        
+        if (!m_controlsWidget->isVisible()) {
+            m_controlsWidget->setVisible(true);
+        }
+        
+        // Restart the hide timer
+        startCursorTimer();
+    }
+}
+
 bool LightweightVideoPlayer::eventFilter(QObject *watched, QEvent *event)
 {
-    // Handle double-click on video widget
+    // Handle double-click on video widget for fullscreen toggle
     if (watched == m_videoWidget && event->type() == QEvent::MouseButtonDblClick) {
         QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
         if (mouseEvent->button() == Qt::LeftButton) {
-            on_playButton_clicked();
+            toggleFullScreen();
             return true;
+        }
+    }
+    
+    // Handle mouse movement on controls to show them in fullscreen
+    if (m_isFullScreen && (watched == m_controlsWidget || watched == m_videoWidget)) {
+        if (event->type() == QEvent::MouseMove) {
+            showCursor();
+            if (!m_controlsWidget->isVisible()) {
+                m_controlsWidget->setVisible(true);
+            }
+            startCursorTimer();
         }
     }
     

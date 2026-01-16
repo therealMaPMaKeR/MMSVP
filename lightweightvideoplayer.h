@@ -11,6 +11,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QWheelEvent>
+#include <QMargins>
 #include <QTimer>
 #include <QPointer>
 #include <memory>
@@ -19,10 +20,9 @@
 
 /**
  * @class LightweightVideoPlayer
- * @brief Lightweight video player with essential playback features
+ * @brief Lightweight video player with essential playback features including fullscreen
  * 
- * Stripped-down version of BaseVideoPlayer without encryption,
- * fullscreen, or advanced features - just core playback functionality
+ * Simple video player with core playback functionality and fullscreen support
  */
 class LightweightVideoPlayer : public QWidget
 {
@@ -40,6 +40,11 @@ public:
     void setVolume(int volume);
     void setPosition(qint64 position);
     void setPlaybackSpeed(qreal speed);
+    
+    // Fullscreen management
+    void toggleFullScreen();
+    void enterFullScreen();
+    void exitFullScreen();
     
     // State query functions
     bool isPlaying() const;
@@ -59,6 +64,7 @@ signals:
     void durationChanged(qint64 duration);
     void volumeChanged(int volume);
     void playbackSpeedChanged(qreal speed);
+    void fullScreenChanged(bool isFullScreen);
 
 protected slots:
     // UI control slots
@@ -68,6 +74,7 @@ protected slots:
     void on_positionSlider_sliderReleased();
     void on_volumeSlider_sliderMoved(int position);
     void on_speedSpinBox_valueChanged(double value);
+    void on_fullScreenButton_clicked();
     
     // Media player slots
     void updatePosition(qint64 position);
@@ -76,11 +83,17 @@ protected slots:
     void handlePlaybackStateChanged(VP_VLCPlayer::PlayerState state);
     void handleVideoFinished();
     
+    // Cursor management
+    void hideCursor();
+    void showCursor();
+    void checkMouseMovement();
+    
 protected:
     // Event handlers
     void closeEvent(QCloseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
     
     // UI setup methods
@@ -91,6 +104,8 @@ protected:
     
     // Helper methods
     QString formatTime(qint64 milliseconds) const;
+    void startCursorTimer();
+    void stopCursorTimer();
     
     // Custom slider class for clickable seeking
     class ClickableSlider;
@@ -103,6 +118,7 @@ protected:
     // Control widgets
     QPointer<QPushButton> m_playButton;
     QPointer<QPushButton> m_stopButton;
+    QPointer<QPushButton> m_fullScreenButton;
     QPointer<QSlider> m_positionSlider;
     QPointer<QSlider> m_volumeSlider;
     QPointer<QDoubleSpinBox> m_speedSpinBox;
@@ -120,8 +136,16 @@ protected:
     // State tracking
     QString m_currentVideoPath;
     bool m_isSliderBeingMoved;
+    bool m_isFullScreen;
+    QRect m_normalGeometry;
+    QMargins m_normalMargins;
     bool m_isClosing;
     bool m_playbackStartedEmitted;
+    
+    // Mouse cursor auto-hide
+    QTimer* m_cursorTimer;
+    QTimer* m_mouseCheckTimer;
+    QPoint m_lastMousePos;
     
 private:
     void initializePlayer();
