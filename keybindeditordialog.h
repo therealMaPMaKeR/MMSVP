@@ -28,6 +28,7 @@ public:
 
 private slots:
     void onCellClicked(int row, int column);
+    void onCellRightClicked(const QPoint& pos);
     void onResetToDefaultsClicked();
     void onSaveClicked();
     void onCancelClicked();
@@ -37,6 +38,8 @@ private:
     void populateTable();
     void updateKeybindDisplay(int row);
     void startEditingKeybind(int row, int keybindIndex);
+    void clearKeybind(int row, int keybindIndex);
+    void resetInstructionLabel();
     QString getKeybindDisplayText(const QKeySequence& keySeq) const;
     
     // Keybind manager reference

@@ -100,7 +100,7 @@ void KeybindEditorDialog::setupUI()
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     
     // Instruction label
-    m_instructionLabel = new QLabel(tr("Click on a keybind cell to change it. Press Escape to cancel editing."), this);
+    m_instructionLabel = new QLabel(tr("Click on a keybind cell to change it. Right-click to clear. Press Escape to cancel editing."), this);
     m_instructionLabel->setWordWrap(true);
     m_instructionLabel->setStyleSheet("QLabel { color: #555; font-style: italic; margin-bottom: 10px; }");
     mainLayout->addWidget(m_instructionLabel);
@@ -116,8 +116,10 @@ void KeybindEditorDialog::setupUI()
     m_tableWidget->verticalHeader()->setVisible(false);
     m_tableWidget->setSelectionMode(QAbstractItemView::SingleSelection);
     m_tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_tableWidget->setContextMenuPolicy(Qt::CustomContextMenu);
     
     connect(m_tableWidget, &QTableWidget::cellClicked, this, &KeybindEditorDialog::onCellClicked);
+    connect(m_tableWidget, &QTableWidget::customContextMenuRequested, this, &KeybindEditorDialog::onCellRightClicked);
     
     mainLayout->addWidget(m_tableWidget);
     
@@ -239,6 +241,27 @@ void KeybindEditorDialog::onCellClicked(int row, int column)
     startEditingKeybind(row, keybindIndex);
 }
 
+void KeybindEditorDialog::onCellRightClicked(const QPoint& pos)
+{
+    QTableWidgetItem* item = m_tableWidget->itemAt(pos);
+    if (!item) return;
+    
+    int row = item->row();
+    int column = item->column();
+    
+    // Only allow right-clicking on keybind columns (1 and 2)
+    if (column < 1 || column > 2) {
+        return;
+    }
+    
+    qDebug() << "KeybindEditorDialog: Right-click on row:" << row << "column:" << column;
+    
+    // Determine which keybind index (0 = primary, 1 = secondary)
+    int keybindIndex = column - 1;
+    
+    clearKeybind(row, keybindIndex);
+}
+
 void KeybindEditorDialog::startEditingKeybind(int row, int keybindIndex)
 {
     qDebug() << "KeybindEditorDialog: Starting keybind edit for row" << row << "index" << keybindIndex;
@@ -263,11 +286,15 @@ void KeybindEditorDialog::startEditingKeybind(int row, int keybindIndex)
         
         // Validate the keybind
         if (!m_keybindManager->isValidKeybind(keySeq)) {
-            QMessageBox::warning(this, tr("Invalid Keybind"), 
-                               tr("This key combination cannot be bound."));
+            // Clean up first
             m_tableWidget->removeCellWidget(row, keybindIndex + 1);
             captureWidget->deleteLater();
             m_isEditingKeybind = false;
+            resetInstructionLabel();
+            
+            // Then show error
+            QMessageBox::warning(this, tr("Invalid Keybind"), 
+                               tr("This key combination cannot be bound."));
             return;
         }
         
@@ -280,11 +307,16 @@ void KeybindEditorDialog::startEditingKeybind(int row, int keybindIndex)
             
             if (it.value().contains(keySeq)) {
                 QString actionName = KeybindManager::actionToString(it.key());
-                QMessageBox::warning(this, tr("Keybind In Use"), 
-                                   tr("This keybind is already assigned to: %1").arg(actionName));
+                
+                // Clean up first
                 m_tableWidget->removeCellWidget(row, keybindIndex + 1);
                 captureWidget->deleteLater();
                 m_isEditingKeybind = false;
+                resetInstructionLabel();
+                
+                // Then show error
+                QMessageBox::warning(this, tr("Keybind In Use"), 
+                                   tr("This keybind is already assigned to: %1").arg(actionName));
                 return;
             }
         }
@@ -292,11 +324,15 @@ void KeybindEditorDialog::startEditingKeybind(int row, int keybindIndex)
         // Check if it's already assigned to another slot of the same action
         for (int i = 0; i < currentKeybinds.size(); ++i) {
             if (i != keybindIndex && currentKeybinds[i] == keySeq) {
-                QMessageBox::warning(this, tr("Duplicate Keybind"), 
-                                   tr("This keybind is already assigned to another slot of this action."));
+                // Clean up first
                 m_tableWidget->removeCellWidget(row, keybindIndex + 1);
                 captureWidget->deleteLater();
                 m_isEditingKeybind = false;
+                resetInstructionLabel();
+                
+                // Then show error
+                QMessageBox::warning(this, tr("Duplicate Keybind"), 
+                                   tr("This keybind is already assigned to another slot of this action."));
                 return;
             }
         }
@@ -319,6 +355,9 @@ void KeybindEditorDialog::startEditingKeybind(int row, int keybindIndex)
         m_tableWidget->removeCellWidget(row, keybindIndex + 1);
         captureWidget->deleteLater();
         m_isEditingKeybind = false;
+        
+        // Reset instruction label after successful capture
+        resetInstructionLabel();
     });
     
     connect(captureWidget, &KeyCaptureWidget::captureCancelled, this, [this, row, keybindIndex, captureWidget]() {
@@ -326,6 +365,9 @@ void KeybindEditorDialog::startEditingKeybind(int row, int keybindIndex)
         m_tableWidget->removeCellWidget(row, keybindIndex + 1);
         captureWidget->deleteLater();
         m_isEditingKeybind = false;
+        
+        // Reset instruction label after cancellation
+        resetInstructionLabel();
     });
     
     // Set the capture widget in the table cell
@@ -335,6 +377,37 @@ void KeybindEditorDialog::startEditingKeybind(int row, int keybindIndex)
     // Show instruction
     m_instructionLabel->setText(tr("Press a key combination (or Escape to cancel)..."));
     m_instructionLabel->setStyleSheet("QLabel { color: #2196F3; font-weight: bold; margin-bottom: 10px; }");
+}
+
+void KeybindEditorDialog::clearKeybind(int row, int keybindIndex)
+{
+    qDebug() << "KeybindEditorDialog: Clearing keybind at row" << row << "index" << keybindIndex;
+    
+    // Get the action
+    QTableWidgetItem* actionItem = m_tableWidget->item(row, 0);
+    if (!actionItem) return;
+    
+    KeybindManager::Action action = static_cast<KeybindManager::Action>(actionItem->data(Qt::UserRole).toInt());
+    
+    // Get current keybinds
+    QList<QKeySequence> currentKeybinds = m_tempKeybinds.value(action);
+    
+    // Clear the specified keybind
+    if (keybindIndex < currentKeybinds.size()) {
+        currentKeybinds[keybindIndex] = QKeySequence();
+        m_tempKeybinds[action] = currentKeybinds;
+        
+        // Update display
+        updateKeybindDisplay(row);
+        
+        qDebug() << "KeybindEditorDialog: Keybind cleared successfully";
+    }
+}
+
+void KeybindEditorDialog::resetInstructionLabel()
+{
+    m_instructionLabel->setText(tr("Click on a keybind cell to change it. Right-click to clear. Press Escape to cancel editing."));
+    m_instructionLabel->setStyleSheet("QLabel { color: #555; font-style: italic; margin-bottom: 10px; }");
 }
 
 void KeybindEditorDialog::onResetToDefaultsClicked()
