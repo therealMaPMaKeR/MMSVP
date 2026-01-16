@@ -3,6 +3,9 @@
 #include "videoplayer.h"
 #include <QFileDialog>
 #include <QDebug>
+#include <QMouseEvent>
+#include <QStyleOptionSlider>
+#include <QApplication>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -19,6 +22,10 @@ MainWindow::MainWindow(QWidget *parent)
     ui->volumeSlider->setValue(50);
     m_videoPlayer->setVolume(50);
     
+    // Make seek slider jump to click position instead of stepping
+    ui->seekSlider->setPageStep(0);
+    ui->seekSlider->installEventFilter(this);
+    
     // Connect signals
     connect(ui->openButton, &QPushButton::clicked, this, &MainWindow::onOpenFile);
     connect(ui->playPauseButton, &QPushButton::clicked, this, &MainWindow::onPlayPause);
@@ -26,6 +33,13 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->seekSlider, &QSlider::sliderPressed, this, &MainWindow::onSeekSliderPressed);
     connect(ui->seekSlider, &QSlider::sliderReleased, this, &MainWindow::onSeekSliderReleased);
     connect(ui->seekSlider, &QSlider::sliderMoved, this, &MainWindow::onSeekSliderMoved);
+    connect(ui->seekSlider, &QSlider::valueChanged, this, [this](int value) {
+        // Handle direct clicks on the slider bar (not dragging)
+        if (!m_seeking) {
+            float position = value / 1000.0f;
+            m_videoPlayer->setPosition(position);
+        }
+    });
     connect(ui->volumeSlider, &QSlider::valueChanged, this, &MainWindow::onVolumeChanged);
     
     // Setup update timer
@@ -81,9 +95,9 @@ void MainWindow::onSeekSliderPressed()
 
 void MainWindow::onSeekSliderReleased()
 {
-    m_seeking = false;
     float position = ui->seekSlider->value() / 1000.0f;
     m_videoPlayer->setPosition(position);
+    m_seeking = false;
 }
 
 void MainWindow::onSeekSliderMoved(int position)
@@ -135,4 +149,72 @@ QString MainWindow::formatTime(qint64 milliseconds)
             .arg(minutes, 2, 10, QChar('0'))
             .arg(seconds, 2, 10, QChar('0'));
     }
+}
+
+bool MainWindow::eventFilter(QObject *obj, QEvent *event)
+{
+    if (obj == ui->seekSlider && event->type() == QEvent::MouseButtonPress) {
+        QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+        
+        // Get the slider's style to calculate handle position
+        QStyleOptionSlider opt;
+        opt.initFrom(ui->seekSlider);
+        opt.minimum = ui->seekSlider->minimum();
+        opt.maximum = ui->seekSlider->maximum();
+        opt.sliderPosition = ui->seekSlider->value();
+        opt.sliderValue = ui->seekSlider->value();
+        opt.orientation = ui->seekSlider->orientation();
+        
+        // Get the handle rectangle
+        QRect handleRect = ui->seekSlider->style()->subControlRect(
+            QStyle::CC_Slider, &opt, QStyle::SC_SliderHandle, ui->seekSlider);
+        
+        // If click is on the handle, let Qt handle it (for dragging)
+        if (handleRect.contains(mouseEvent->pos())) {
+            return QMainWindow::eventFilter(obj, event);
+        }
+        
+        // Otherwise, calculate the clicked position and jump to it
+        int sliderMin = ui->seekSlider->minimum();
+        int sliderMax = ui->seekSlider->maximum();
+        int sliderLength = ui->seekSlider->width();
+        
+        double clickPosition = mouseEvent->pos().x();
+        int newValue = sliderMin + ((sliderMax - sliderMin) * clickPosition) / sliderLength;
+        
+        // Clamp the value to valid range
+        if (newValue < sliderMin) newValue = sliderMin;
+        if (newValue > sliderMax) newValue = sliderMax;
+        
+        // Set the slider value (this will trigger valueChanged)
+        ui->seekSlider->setValue(newValue);
+        
+        // Create a new mouse event at the handle position to enable dragging
+        // Calculate where the handle is now after moving
+        opt.sliderPosition = newValue;
+        opt.sliderValue = newValue;
+        QRect newHandleRect = ui->seekSlider->style()->subControlRect(
+            QStyle::CC_Slider, &opt, QStyle::SC_SliderHandle, ui->seekSlider);
+        
+        // Create a synthetic mouse press event on the handle center
+        QPoint handleCenter = newHandleRect.center();
+        QMouseEvent *syntheticEvent = new QMouseEvent(
+            QEvent::MouseButtonPress,
+            handleCenter,
+            mouseEvent->globalPosition(),
+            mouseEvent->button(),
+            mouseEvent->buttons(),
+            mouseEvent->modifiers()
+        );
+        
+        // Send the synthetic event to the slider to start dragging
+        QApplication::sendEvent(ui->seekSlider, syntheticEvent);
+        delete syntheticEvent;
+        
+        // Return true to indicate we handled the original event
+        return true;
+    }
+    
+    // Pass the event on to the parent class
+    return QMainWindow::eventFilter(obj, event);
 }
