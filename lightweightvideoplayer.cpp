@@ -1364,7 +1364,30 @@ void LightweightVideoPlayer::cycleLoopMode()
             m_loopMode = LoopMode::LoopSingle;
             break;
         case LoopMode::LoopSingle:
-            m_loopMode = LoopMode::LoopAll;
+            // When entering LoopAll mode, check for valid loops first
+            {
+                int firstLoopIndex = findFirstValidLoop();
+                if (firstLoopIndex >= 0) {
+                    // Found at least one valid loop, enter LoopAll mode
+                    m_loopMode = LoopMode::LoopAll;
+                    qDebug() << "LightweightVideoPlayer: Found valid loop at index" << firstLoopIndex << ", entering Loop All mode";
+                    
+                    // Only jump to the loop if media is loaded and playing
+                    if (m_mediaPlayer && m_mediaPlayer->hasMedia()) {
+                        // Temporarily disable loop checking to prevent recursion
+                        LoopMode savedMode = m_loopMode;
+                        m_loopMode = LoopMode::NoLoop;
+                        loadPlaybackState(firstLoopIndex);
+                        m_loopMode = savedMode;
+                    }
+                } else {
+                    // No valid loops found, skip to NoLoop instead
+                    m_loopMode = LoopMode::NoLoop;
+                    m_currentLoopStateIndex = -1;
+                    qDebug() << "LightweightVideoPlayer: No valid loops found, skipping to No Loop";
+                    showTemporaryMessage(tr("No valid loops - No Loop"));
+                }
+            }
             break;
         case LoopMode::LoopAll:
             m_loopMode = LoopMode::NoLoop;
@@ -1375,7 +1398,10 @@ void LightweightVideoPlayer::cycleLoopMode()
     QString modeStr = getLoopModeString();
     qDebug() << "LightweightVideoPlayer: Loop mode changed to" << modeStr;
     
-    showTemporaryMessage(tr("Loop Mode: %1").arg(modeStr));
+    // Only show the mode message if we're not showing the "no valid loops" message
+    if (m_loopMode != LoopMode::NoLoop || m_currentLoopStateIndex != -1) {
+        showTemporaryMessage(tr("Loop Mode: %1").arg(modeStr));
+    }
 }
 
 void LightweightVideoPlayer::returnToLastPosition()
@@ -1688,6 +1714,20 @@ QString LightweightVideoPlayer::getStatesFilePath(int groupIndex) const
     QString basePath = fileInfo.absolutePath() + "/" + fileInfo.completeBaseName();
     
     return basePath + QString(".statesG%1").arg(groupIndex + 1);
+}
+
+int LightweightVideoPlayer::findFirstValidLoop() const
+{
+    // Search for the first state that has both isValid and hasEndPosition set
+    for (int i = 0; i < 12; i++) {
+        const PlaybackState& state = m_playbackStates[m_currentStateGroup][i];
+        if (state.isValid && state.hasEndPosition) {
+            return i;
+        }
+    }
+    
+    // No valid loop found
+    return -1;
 }
 
 // TemporaryMessageLabel implementation
