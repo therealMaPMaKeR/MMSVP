@@ -5,6 +5,10 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QTimer>
+#include <QEventLoop>
+#include <QPixmap>
+#include <QBuffer>
 
 VP_VLCPlayer::VP_VLCPlayer(QObject *parent)
     : QObject(parent)
@@ -708,4 +712,78 @@ void VP_VLCPlayer::updateMediaInfo()
     }
     
     qDebug() << "VP_VLCPlayer: Media info updated, duration:" << m_duration << "ms";
+}
+
+QPixmap VP_VLCPlayer::captureFrameAtPosition(qint64 position)
+{
+    qDebug() << "VP_VLCPlayer: Capturing frame at position" << position << "ms";
+    
+    if (!m_mediaPlayer || !m_currentMedia) {
+        qDebug() << "VP_VLCPlayer: No media loaded, cannot capture frame";
+        return QPixmap();
+    }
+    
+    // Store current state
+    qint64 originalPosition = libvlc_media_player_get_time(m_mediaPlayer);
+    bool wasPlaying = libvlc_media_player_is_playing(m_mediaPlayer);
+    
+    // Pause if playing
+    if (wasPlaying) {
+        libvlc_media_player_set_pause(m_mediaPlayer, 1);
+    }
+    
+    // Seek to target position
+    libvlc_media_player_set_time(m_mediaPlayer, position);
+    
+    // Wait for seek to complete (give VLC time to render the frame)
+    QEventLoop loop;
+    QTimer timer;
+    timer.setSingleShot(true);
+    connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timer.start(200); // Wait 200ms for frame to render
+    loop.exec();
+    
+    // Create temporary file for snapshot
+    QString tempDir = QDir::tempPath();
+    QString tempFile = tempDir + "/vlc_snapshot_temp.png";
+    
+    // Take snapshot
+    int result = libvlc_video_take_snapshot(m_mediaPlayer, 0, tempFile.toUtf8().constData(), 100, 75);
+    
+    if (result != 0) {
+        qDebug() << "VP_VLCPlayer: Failed to take snapshot, result:" << result;
+        
+        // Restore original state
+        if (wasPlaying) {
+            libvlc_media_player_set_pause(m_mediaPlayer, 0);
+        }
+        libvlc_media_player_set_time(m_mediaPlayer, originalPosition);
+        
+        return QPixmap();
+    }
+    
+    // Wait for file to be written
+    timer.start(100);
+    loop.exec();
+    
+    // Load the snapshot
+    QPixmap pixmap;
+    if (QFile::exists(tempFile)) {
+        pixmap.load(tempFile);
+        
+        // Delete temporary file
+        QFile::remove(tempFile);
+        
+        qDebug() << "VP_VLCPlayer: Successfully captured frame, size:" << pixmap.size();
+    } else {
+        qDebug() << "VP_VLCPlayer: Snapshot file was not created";
+    }
+    
+    // Restore original state
+    libvlc_media_player_set_time(m_mediaPlayer, originalPosition);
+    if (wasPlaying) {
+        libvlc_media_player_set_pause(m_mediaPlayer, 0);
+    }
+    
+    return pixmap;
 }

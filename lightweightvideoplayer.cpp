@@ -12,8 +12,7 @@
 #include <QMessageBox>
 #include <QScreen>
 #include <QCursor>
-#include <QScreen>
-#include <QCursor>
+#include <QBuffer>
 
 // Custom clickable slider class for seeking in video
 class LightweightVideoPlayer::ClickableSlider : public QSlider
@@ -1301,6 +1300,15 @@ void LightweightVideoPlayer::applyAllStates(const PlaybackState src[4][12])
     }
 }
 
+QPixmap LightweightVideoPlayer::captureFrameAtPosition(qint64 position)
+{
+    if (!m_mediaPlayer) {
+        return QPixmap();
+    }
+    
+    return m_mediaPlayer->captureFrameAtPosition(position);
+}
+
 // Helper methods
 QString LightweightVideoPlayer::formatTime(qint64 milliseconds) const
 {
@@ -1339,16 +1347,21 @@ void LightweightVideoPlayer::savePlaybackState(int stateIndex)
     qint64 currentPosition = m_mediaPlayer->position();
     qreal currentSpeed = m_mediaPlayer->playbackRate();
     
+    // Capture preview image at current position
+    QPixmap preview = m_mediaPlayer->captureFrameAtPosition(currentPosition);
+    
     // Save the state with start position and clear any existing end position
     m_playbackStates[m_currentStateGroup][stateIndex].startPosition = currentPosition;
     m_playbackStates[m_currentStateGroup][stateIndex].playbackSpeed = currentSpeed;
     m_playbackStates[m_currentStateGroup][stateIndex].isValid = true;
     m_playbackStates[m_currentStateGroup][stateIndex].endPosition = 0;
     m_playbackStates[m_currentStateGroup][stateIndex].hasEndPosition = false;
+    m_playbackStates[m_currentStateGroup][stateIndex].previewImage = preview;
     
     qDebug() << "LightweightVideoPlayer: Saved state" << (stateIndex + 1) 
              << "in group" << (m_currentStateGroup + 1)
-             << "- Start Position:" << currentPosition << "ms, Speed:" << currentSpeed << "x";
+             << "- Start Position:" << currentPosition << "ms, Speed:" << currentSpeed << "x"
+             << "Preview size:" << preview.size();
     
     // Note: File saving is now manual via Ctrl+F1-F4
     
@@ -1759,9 +1772,9 @@ void LightweightVideoPlayer::loadStatesFromFile()
                 continue;
             }
             
-            // Parse line: StateIndex,StartPos,EndPos,Speed,Valid,HasEnd
+            // Parse line: StateIndex,StartPos,EndPos,Speed,Valid,HasEnd,ImageData
             QStringList parts = line.split(",");
-            if (parts.size() != 6) {
+            if (parts.size() < 6) {
                 qDebug() << "LightweightVideoPlayer: Invalid line format in states file:" << line;
                 continue;
             }
@@ -1794,12 +1807,20 @@ void LightweightVideoPlayer::loadStatesFromFile()
             bool isValid = (parts[4] == "1");
             bool hasEnd = (parts[5] == "1");
             
+            // Load preview image if available (v2.0 format)
+            QPixmap previewImage;
+            if (parts.size() > 6 && !parts[6].isEmpty()) {
+                QByteArray imageData = QByteArray::fromBase64(parts[6].toUtf8());
+                previewImage.loadFromData(imageData, "PNG");
+            }
+            
             // Load the state
             m_playbackStates[groupIndex][stateIndex].startPosition = startPos;
             m_playbackStates[groupIndex][stateIndex].endPosition = endPos;
             m_playbackStates[groupIndex][stateIndex].playbackSpeed = speed;
             m_playbackStates[groupIndex][stateIndex].isValid = isValid;
             m_playbackStates[groupIndex][stateIndex].hasEndPosition = hasEnd;
+            m_playbackStates[groupIndex][stateIndex].previewImage = previewImage;
             
             statesLoaded++;
         }
@@ -1861,8 +1882,8 @@ void LightweightVideoPlayer::saveStateGroup(int groupIndex)
     out.setEncoding(QStringConverter::Utf8);
     
     // Write header
-    out << "# Video Player State Group File v1.0\n";
-    out << "# Format: StateIndex,StartPos,EndPos,Speed,Valid,HasEnd\n";
+    out << "# Video Player State Group File v2.0\n";
+    out << "# Format: StateIndex,StartPos,EndPos,Speed,Valid,HasEnd,ImageData\n";
     out << "\n";
     
     // Write each state for this group
@@ -1874,7 +1895,20 @@ void LightweightVideoPlayer::saveStateGroup(int groupIndex)
             << state.endPosition << ","
             << state.playbackSpeed << ","
             << (state.isValid ? "1" : "0") << ","
-            << (state.hasEndPosition ? "1" : "0") << "\n";
+            << (state.hasEndPosition ? "1" : "0") << ",";
+        
+        // Encode preview image as Base64 if available
+        if (!state.previewImage.isNull()) {
+            QByteArray imageData;
+            QBuffer buffer(&imageData);
+            buffer.open(QIODevice::WriteOnly);
+            state.previewImage.save(&buffer, "PNG");
+            
+            QString base64 = imageData.toBase64();
+            out << base64;
+        }
+        
+        out << "\n";
     }
     
     file.close();

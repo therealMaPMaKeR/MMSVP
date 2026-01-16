@@ -124,6 +124,7 @@ void StatesEditorDialog::loadStatesFromPlayer()
             m_tempStates[g][s].playbackSpeed = playerState.playbackSpeed;
             m_tempStates[g][s].isValid = playerState.isValid;
             m_tempStates[g][s].hasEndPosition = playerState.hasEndPosition;
+            m_tempStates[g][s].previewImage = playerState.previewImage;
         }
     }
     
@@ -145,8 +146,8 @@ void StatesEditorDialog::populateStateList(int groupIndex)
         
         QListWidgetItem* item = new QListWidgetItem();
         
-        // Set icon (placeholder for now)
-        item->setIcon(createPlaceholderIcon(state.isValid));
+        // Set icon (use real preview or placeholder)
+        item->setIcon(createIconFromPixmap(state.previewImage, state.isValid));
         
         // Set text
         QString text = tr("State %1: ").arg(i + 1);
@@ -159,6 +160,11 @@ void StatesEditorDialog::populateStateList(int groupIndex)
             
             if (state.hasEndPosition) {
                 text += " - " + formatTime(state.endPosition);
+            }
+            
+            // Add speed info if not 1.0x
+            if (!qFuzzyCompare(state.playbackSpeed, 1.0)) {
+                text += QString(" (%1x)").arg(state.playbackSpeed, 0, 'f', 1);
             }
         }
         
@@ -259,12 +265,20 @@ void StatesEditorDialog::onStateItemRightClicked(const QPoint& pos)
     QMenu contextMenu(tr("State Actions"), this);
     
     QAction* editAction = contextMenu.addAction(tr("Edit State"));
+    QAction* refreshAction = contextMenu.addAction(tr("Refresh Preview"));
     QAction* deleteAction = contextMenu.addAction(tr("Delete State"));
+    
+    // Disable refresh for invalid states
+    if (!m_tempStates[groupIndex][stateIndex].isValid) {
+        refreshAction->setEnabled(false);
+    }
     
     QAction* selectedAction = contextMenu.exec(list->mapToGlobal(pos));
     
     if (selectedAction == editAction) {
         showEditDialog(groupIndex, stateIndex);
+    } else if (selectedAction == refreshAction) {
+        refreshPreview(groupIndex, stateIndex);
     } else if (selectedAction == deleteAction) {
         deleteState(groupIndex, stateIndex);
     }
@@ -290,6 +304,7 @@ void StatesEditorDialog::showEditDialog(int groupIndex, int stateIndex)
     editState.playbackSpeed = state.playbackSpeed;
     editState.isValid = state.isValid;
     editState.hasEndPosition = state.hasEndPosition;
+    editState.previewImage = state.previewImage;
     
     StateEditDialog editDialog(editState, stateIndex, maxDuration, this);
     
@@ -303,6 +318,7 @@ void StatesEditorDialog::showEditDialog(int groupIndex, int stateIndex)
         state.playbackSpeed = editState.playbackSpeed;
         state.isValid = editState.isValid;
         state.hasEndPosition = editState.hasEndPosition;
+        state.previewImage = editState.previewImage;
         
         // Mark this group as having changes
         m_groupHasChanges[groupIndex] = true;
@@ -340,6 +356,42 @@ void StatesEditorDialog::deleteState(int groupIndex, int stateIndex)
     }
 }
 
+void StatesEditorDialog::refreshPreview(int groupIndex, int stateIndex)
+{
+    if (groupIndex < 0 || groupIndex >= 4 || stateIndex < 0 || stateIndex >= 12) {
+        return;
+    }
+    
+    if (!m_player) {
+        return;
+    }
+    
+    TempStateStorage& state = m_tempStates[groupIndex][stateIndex];
+    
+    if (!state.isValid) {
+        return;
+    }
+    
+    qDebug() << "StatesEditorDialog: Refreshing preview for state" << (stateIndex + 1)
+             << "in group" << (groupIndex + 1);
+    
+    // Capture new preview at the state's start position
+    QPixmap newPreview = m_player->captureFrameAtPosition(state.startPosition);
+    
+    if (!newPreview.isNull()) {
+        state.previewImage = newPreview;
+        m_groupHasChanges[groupIndex] = true;
+        
+        // Update display
+        populateStateList(groupIndex);
+        
+        qDebug() << "StatesEditorDialog: Preview refreshed successfully";
+    } else {
+        QMessageBox::warning(this, tr("Failed to Capture"),
+                           tr("Failed to capture preview image. Make sure video is loaded."));
+    }
+}
+
 bool StatesEditorDialog::checkUnsavedChanges(int fromGroup)
 {
     if (fromGroup < 0 || fromGroup >= 4) {
@@ -365,6 +417,7 @@ void StatesEditorDialog::saveChangesToPlayer()
             playerState.playbackSpeed = m_tempStates[g][s].playbackSpeed;
             playerState.isValid = m_tempStates[g][s].isValid;
             playerState.hasEndPosition = m_tempStates[g][s].hasEndPosition;
+            playerState.previewImage = m_tempStates[g][s].previewImage;
             
             m_player->setPlaybackState(g, s, playerState);
         }
@@ -452,30 +505,35 @@ qint64 StatesEditorDialog::parseTime(const QTime& time) const
     return time.msecsSinceStartOfDay();
 }
 
-QIcon StatesEditorDialog::createPlaceholderIcon(bool hasState) const
+QIcon StatesEditorDialog::createIconFromPixmap(const QPixmap& pixmap, bool hasState) const
 {
-    // Create a simple placeholder icon
-    QPixmap pixmap(100, 75);
-    
-    if (hasState) {
-        // Blue placeholder for valid states
-        pixmap.fill(QColor(100, 150, 200));
-        
-        QPainter painter(&pixmap);
-        painter.setPen(Qt::white);
-        painter.setFont(QFont("Arial", 20, QFont::Bold));
-        painter.drawText(pixmap.rect(), Qt::AlignCenter, "▶");
-    } else {
-        // Gray placeholder for empty states
-        pixmap.fill(QColor(180, 180, 180));
-        
-        QPainter painter(&pixmap);
-        painter.setPen(Qt::darkGray);
-        painter.setFont(QFont("Arial", 12));
-        painter.drawText(pixmap.rect(), Qt::AlignCenter, "Empty");
+    if (!pixmap.isNull()) {
+        // Use the actual preview image
+        return QIcon(pixmap);
     }
     
-    return QIcon(pixmap);
+    // Create a placeholder icon
+    QPixmap placeholder(100, 75);
+    
+    if (hasState) {
+        // Blue placeholder for valid states without preview
+        placeholder.fill(QColor(100, 150, 200));
+        
+        QPainter painter(&placeholder);
+        painter.setPen(Qt::white);
+        painter.setFont(QFont("Arial", 20, QFont::Bold));
+        painter.drawText(placeholder.rect(), Qt::AlignCenter, "▶");
+    } else {
+        // Gray placeholder for empty states
+        placeholder.fill(QColor(180, 180, 180));
+        
+        QPainter painter(&placeholder);
+        painter.setPen(Qt::darkGray);
+        painter.setFont(QFont("Arial", 12));
+        painter.drawText(placeholder.rect(), Qt::AlignCenter, "Empty");
+    }
+    
+    return QIcon(placeholder);
 }
 
 // StateEditDialog implementation
@@ -541,6 +599,21 @@ void StateEditDialog::setupUI()
     formLayout->addWidget(endLabel, 2, 0);
     formLayout->addWidget(m_endTimeEdit, 2, 1);
     
+    // Playback speed
+    QLabel* speedLabel = new QLabel(tr("Playback Speed:"), this);
+    m_speedSpinBox = new QDoubleSpinBox(this);
+    m_speedSpinBox->setRange(0.1, 5.0);
+    m_speedSpinBox->setSingleStep(0.1);
+    m_speedSpinBox->setValue(m_state.playbackSpeed);
+    m_speedSpinBox->setSuffix("x");
+    m_speedSpinBox->setDecimals(1);
+    
+    connect(m_speedSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &StateEditDialog::onSpeedChanged);
+    
+    formLayout->addWidget(speedLabel, 3, 0);
+    formLayout->addWidget(m_speedSpinBox, 3, 1);
+    
     mainLayout->addLayout(formLayout);
     
     // Warning label
@@ -549,12 +622,6 @@ void StateEditDialog::setupUI()
     m_warningLabel->setVisible(false);
     m_warningLabel->setWordWrap(true);
     mainLayout->addWidget(m_warningLabel);
-    
-    // Info label
-    QLabel* infoLabel = new QLabel(tr("Note: The playback speed setting is managed separately and not edited here."), this);
-    infoLabel->setStyleSheet("QLabel { color: #555; font-style: italic; }");
-    infoLabel->setWordWrap(true);
-    mainLayout->addWidget(infoLabel);
     
     mainLayout->addStretch();
     
@@ -624,6 +691,11 @@ void StateEditDialog::onHasEndChanged(int state)
     if (!m_state.hasEndPosition) {
         m_warningLabel->setVisible(false);
     }
+}
+
+void StateEditDialog::onSpeedChanged(double value)
+{
+    m_state.playbackSpeed = value;
 }
 
 void StateEditDialog::updateEndTimeEnabled()

@@ -66,6 +66,7 @@ public:
         qreal playbackSpeed;
         bool isValid;
         bool hasEndPosition;
+        QPixmap previewImage;  // 100x75 thumbnail
         
         PlaybackState() : startPosition(0), endPosition(0), playbackSpeed(1.0), isValid(false), hasEndPosition(false) {}
         PlaybackState(qint64 start, qreal speed) : startPosition(start), endPosition(0), playbackSpeed(speed), isValid(true), hasEndPosition(false) {}
@@ -77,6 +78,9 @@ public:
     void setPlaybackState(int group, int stateIndex, const PlaybackState& state);
     void copyAllStates(PlaybackState dest[4][12]) const;
     void applyAllStates(const PlaybackState src[4][12]);
+    
+    // Frame capture for preview images
+    QPixmap captureFrameAtPosition(qint64 position);
 
 signals:
     void errorOccurred(const QString& error);

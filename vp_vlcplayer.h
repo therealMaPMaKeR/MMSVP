@@ -77,6 +77,9 @@ public:
     QSize videoSize() const;
     float aspectRatio() const;
     
+    // Frame capture
+    QPixmap captureFrameAtPosition(qint64 position);
+    
     // Error handling
     QString lastError() const { return m_lastError; }
 

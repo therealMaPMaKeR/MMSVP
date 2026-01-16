@@ -9,8 +9,10 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QTimeEdit>
+#include <QDoubleSpinBox>
 #include <QCheckBox>
 #include <QMap>
+#include <QPixmap>
 
 // Forward declaration
 class LightweightVideoPlayer;
@@ -46,9 +48,10 @@ private:
     bool checkUnsavedChanges(int fromGroup);
     void saveChangesToPlayer();
     void deleteState(int groupIndex, int stateIndex);
+    void refreshPreview(int groupIndex, int stateIndex);
     QString formatTime(qint64 milliseconds) const;
     qint64 parseTime(const QTime& time) const;
-    QIcon createPlaceholderIcon(bool hasState) const;
+    QIcon createIconFromPixmap(const QPixmap& pixmap, bool hasState) const;
     
     // Reference to video player
     LightweightVideoPlayer* m_player;
@@ -70,6 +73,7 @@ private:
         qreal playbackSpeed;
         bool isValid;
         bool hasEndPosition;
+        QPixmap previewImage;
         
         TempStateStorage() : startPosition(0), endPosition(0), playbackSpeed(1.0), isValid(false), hasEndPosition(false) {}
     };
@@ -98,6 +102,7 @@ public:
         qreal playbackSpeed;
         bool isValid;
         bool hasEndPosition;
+        QPixmap previewImage;
         
         EditableState() : startPosition(0), endPosition(0), playbackSpeed(1.0), isValid(false), hasEndPosition(false) {}
     };
@@ -113,6 +118,7 @@ private slots:
     void onStartTimeChanged(const QTime& time);
     void onEndTimeChanged(const QTime& time);
     void onHasEndChanged(int state);
+    void onSpeedChanged(double value);
 
 private:
     void setupUI();
@@ -123,6 +129,7 @@ private:
     
     QTimeEdit* m_startTimeEdit;
     QTimeEdit* m_endTimeEdit;
+    QDoubleSpinBox* m_speedSpinBox;
     QCheckBox* m_hasEndCheckBox;
     QLabel* m_warningLabel;
     
