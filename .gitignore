@@ -75,3 +75,4 @@ release/
 !3rdparty/libvlc/bin/.gitkeep
 !3rdparty/libvlc/lib/.gitkeep
 !3rdparty/libvlc/include/.gitkeep
+/3rdparty
