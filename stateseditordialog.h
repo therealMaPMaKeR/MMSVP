@@ -32,6 +32,9 @@ public:
     explicit StatesEditorDialog(LightweightVideoPlayer* player, QWidget *parent = nullptr);
     ~StatesEditorDialog();
 
+protected:
+    void keyPressEvent(QKeyEvent *event) override;
+
 private slots:
     void onTabChanged(int index);
     void onStateItemDoubleClicked(QListWidgetItem* item);

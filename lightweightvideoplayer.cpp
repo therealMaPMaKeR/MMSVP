@@ -472,7 +472,7 @@ bool LightweightVideoPlayer::loadVideo(const QString& filePath)
     QApplication::processEvents();
     
     // Update window title with filename
-    setWindowTitle(tr("Lightweight Video Player - %1").arg(fileInfo.fileName()));
+    setWindowTitle(tr("%1").arg(fileInfo.fileName()));
     
     // Ensure the widget has focus for keyboard input
     setFocus();

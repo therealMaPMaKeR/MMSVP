@@ -99,6 +99,9 @@ win32 {
 
     # Define for conditional compilation
     DEFINES += USE_LIBVLC
+    
+    # Windows application icon
+    RC_FILE = SimpleVideoPlayer.rc
 }
 
 # Default rules for deployment.

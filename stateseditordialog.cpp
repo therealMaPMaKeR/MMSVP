@@ -9,6 +9,7 @@
 #include <QDebug>
 #include <QEventLoop>
 #include <QTimer>
+#include <QKeyEvent>
 
 // StatesEditorDialog implementation
 StatesEditorDialog::StatesEditorDialog(LightweightVideoPlayer* player, QWidget *parent)
@@ -48,6 +49,38 @@ StatesEditorDialog::StatesEditorDialog(LightweightVideoPlayer* player, QWidget *
 
 StatesEditorDialog::~StatesEditorDialog()
 {
+}
+
+void StatesEditorDialog::keyPressEvent(QKeyEvent *event)
+{
+    // Check if Delete key was pressed
+    if (event->key() == Qt::Key_Delete) {
+        // Get the current group's list widget
+        QListWidget* currentList = m_stateLists[m_currentGroup];
+        
+        // Check if exactly one item is selected
+        QList<QListWidgetItem*> selectedItems = currentList->selectedItems();
+        
+        if (selectedItems.size() == 1) {
+            // Get the state index from the selected item
+            int stateIndex = selectedItems[0]->data(Qt::UserRole).toInt();
+            
+            // Check if the state is valid (can only delete valid states)
+            if (m_tempStates[m_currentGroup][stateIndex].isValid) {
+                qDebug() << "StatesEditorDialog: Delete key pressed for state" << (stateIndex + 1)
+                         << "in group" << (m_currentGroup + 1);
+                
+                // Call the existing delete method
+                deleteState(m_currentGroup, stateIndex);
+                
+                event->accept();
+                return;
+            }
+        }
+    }
+    
+    // If not handled, pass to base class
+    QDialog::keyPressEvent(event);
 }
 
 void StatesEditorDialog::setupUI()
