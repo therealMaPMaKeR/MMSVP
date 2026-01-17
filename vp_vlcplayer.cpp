@@ -274,6 +274,17 @@ void VP_VLCPlayer::play()
     
     qDebug() << "VP_VLCPlayer: Starting playback";
     
+    // If we're at position 0 and stopped (video ended), we need to stop first
+    // to ensure VLC properly resets before playing again
+    if (m_state == PlayerState::Stopped && m_lastPosition == 0) {
+        qDebug() << "VP_VLCPlayer: Resetting player after video end";
+        libvlc_media_player_stop(m_mediaPlayer);
+        // Brief wait for VLC to fully stop
+        QEventLoop loop;
+        QTimer::singleShot(50, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    
     // Set video output window if available
     if (m_videoWidget) {
 #ifdef _WIN32
@@ -642,12 +653,12 @@ void VP_VLCPlayer::handleVLCEvent(const libvlc_event_t* event, void* userData)
         case libvlc_MediaPlayerEndReached:
             qDebug() << "VP_VLCPlayer: Media end reached";
             QMetaObject::invokeMethod(player, [player]() {
-                // Reset position to beginning
-                libvlc_media_player_set_time(player->m_mediaPlayer, 0);
-                // Pause instead of stop so play works immediately
-                libvlc_media_player_set_pause(player->m_mediaPlayer, 1);
-                player->setState(PlayerState::Paused);
+                // Stop the player (VLC cleans up when media ends)
+                player->setState(PlayerState::Stopped);
                 player->m_positionTimer->stop();
+                // Reset position to 0 for UI display
+                player->m_lastPosition = 0;
+                emit player->positionChanged(0);
                 emit player->finished();
             }, Qt::QueuedConnection);
             break;

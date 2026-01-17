@@ -842,6 +842,15 @@ void LightweightVideoPlayer::handlePlaybackStateChanged(VP_VLCPlayer::PlayerStat
 void LightweightVideoPlayer::handleVideoFinished()
 {
     qDebug() << "LightweightVideoPlayer: Video finished";
+    
+    // Update UI to reflect that we're at the beginning and paused
+    if (m_positionSlider) {
+        m_positionSlider->setValue(0);
+    }
+    if (m_positionLabel) {
+        m_positionLabel->setText("00:00");
+    }
+    
     emit finished();
 }
 
