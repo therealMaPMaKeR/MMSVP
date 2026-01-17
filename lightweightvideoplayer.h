@@ -74,10 +74,11 @@ public:
     
     // Getters for states editor
     int currentStateGroup() const { return m_currentStateGroup; }
-    const PlaybackState& getPlaybackState(int group, int stateIndex) const;
-    void setPlaybackState(int group, int stateIndex, const PlaybackState& state);
-    void copyAllStates(PlaybackState dest[4][12]) const;
-    void applyAllStates(const PlaybackState src[4][12]);
+    const PlaybackState& getPlaybackState(int stateIndex) const;
+    void setPlaybackState(int stateIndex, const PlaybackState& state);
+    
+    // Load a specific group from file (returns true if file existed, false if empty/new group)
+    bool loadStateGroupFromFile(int groupIndex);
     
     // Frame capture for preview images
     QPixmap captureFrameAtPosition(qint64 position);
@@ -193,7 +194,7 @@ protected:
         LoopAll
     };
     
-    PlaybackState m_playbackStates[4][12];  // 4 groups x 12 states for keys 1,2,3,4,5,6,7,8,9,0,-,=
+    PlaybackState m_playbackStates[12];  // Current group's 12 states for keys 1,2,3,4,5,6,7,8,9,0,-,=
     int m_currentStateGroup;  // Current active state group (0-3)
     LoopMode m_loopMode;
     bool m_loadPlaybackSpeed;
@@ -218,8 +219,6 @@ private:
     void showTemporaryMessage(const QString& message);
     
     // State group management (private methods)
-    void saveStatesToFile();
-    void loadStatesFromFile();
     QString getStatesFilePath(int groupIndex) const;
     int findFirstValidLoop() const;
     void deleteStateGroup(int groupIndex);

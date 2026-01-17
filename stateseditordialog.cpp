@@ -111,17 +111,15 @@ void StatesEditorDialog::loadStatesFromPlayer()
     // Get current state group from player
     m_currentGroup = m_player->currentStateGroup();
     
-    // Copy all states from player to temporary storage
-    for (int g = 0; g < 4; g++) {
-        for (int s = 0; s < 12; s++) {
-            const auto& playerState = m_player->getPlaybackState(g, s);
-            m_tempStates[g][s].startPosition = playerState.startPosition;
-            m_tempStates[g][s].endPosition = playerState.endPosition;
-            m_tempStates[g][s].playbackSpeed = playerState.playbackSpeed;
-            m_tempStates[g][s].isValid = playerState.isValid;
-            m_tempStates[g][s].hasEndPosition = playerState.hasEndPosition;
-            m_tempStates[g][s].previewImage = playerState.previewImage;
-        }
+    // Copy current group's states from player to temporary storage
+    for (int s = 0; s < 12; s++) {
+        const auto& playerState = m_player->getPlaybackState(s);
+        m_tempStates[m_currentGroup][s].startPosition = playerState.startPosition;
+        m_tempStates[m_currentGroup][s].endPosition = playerState.endPosition;
+        m_tempStates[m_currentGroup][s].playbackSpeed = playerState.playbackSpeed;
+        m_tempStates[m_currentGroup][s].isValid = playerState.isValid;
+        m_tempStates[m_currentGroup][s].hasEndPosition = playerState.hasEndPosition;
+        m_tempStates[m_currentGroup][s].previewImage = playerState.previewImage;
     }
     
     qDebug() << "StatesEditorDialog: Loaded states from player, current group:" << (m_currentGroup + 1);
@@ -181,39 +179,112 @@ void StatesEditorDialog::onTabChanged(int index)
         return;
     }
     
-    // Apply changes to current group before switching
+    // Check if current group has unsaved changes
     if (m_groupHasChanges[m_currentGroup]) {
-        // Save changes to player memory for this group
+        QMessageBox msgBox(this);
+        msgBox.setWindowTitle(tr("Unsaved Changes"));
+        msgBox.setText(tr("Group %1 has unsaved changes.").arg(m_currentGroup + 1));
+        msgBox.setInformativeText(tr("Do you want to save these changes before switching groups?"));
+        
+        QPushButton* saveButton = msgBox.addButton(tr("Save to RAM"), QMessageBox::AcceptRole);
+        QPushButton* discardButton = msgBox.addButton(tr("Discard Changes"), QMessageBox::DestructiveRole);
+        QPushButton* cancelButton = msgBox.addButton(tr("Cancel"), QMessageBox::RejectRole);
+        
+        msgBox.setDefaultButton(saveButton);
+        msgBox.exec();
+        
+        if (msgBox.clickedButton() == cancelButton) {
+            // User cancelled - stay on current group
+            qDebug() << "StatesEditorDialog: User cancelled group switch";
+            m_tabWidget->blockSignals(true);
+            m_tabWidget->setCurrentIndex(m_currentGroup);
+            m_tabWidget->blockSignals(false);
+            return;
+        }
+        else if (msgBox.clickedButton() == saveButton) {
+            // Save changes to player memory for current group
+            qDebug() << "StatesEditorDialog: Saving changes to RAM before switching";
+            for (int s = 0; s < 12; s++) {
+                LightweightVideoPlayer::PlaybackState playerState;
+                playerState.startPosition = m_tempStates[m_currentGroup][s].startPosition;
+                playerState.endPosition = m_tempStates[m_currentGroup][s].endPosition;
+                playerState.playbackSpeed = m_tempStates[m_currentGroup][s].playbackSpeed;
+                playerState.isValid = m_tempStates[m_currentGroup][s].isValid;
+                playerState.hasEndPosition = m_tempStates[m_currentGroup][s].hasEndPosition;
+                playerState.previewImage = m_tempStates[m_currentGroup][s].previewImage;
+                
+                m_player->setPlaybackState(s, playerState);
+            }
+            m_groupHasChanges[m_currentGroup] = false;
+        }
+        else if (msgBox.clickedButton() == discardButton) {
+            // Discard changes - we'll reload from file when switching
+            qDebug() << "StatesEditorDialog: Discarding changes";
+            m_groupHasChanges[m_currentGroup] = false;
+        }
+    }
+    else {
+        // No dialog changes, but save current RAM state to temp before switching
+        // This preserves any Ctrl+1-9 changes made outside the dialog
+        qDebug() << "StatesEditorDialog: Saving current RAM state to temp before switching";
+        for (int s = 0; s < 12; s++) {
+            const auto& playerState = m_player->getPlaybackState(s);
+            m_tempStates[m_currentGroup][s].startPosition = playerState.startPosition;
+            m_tempStates[m_currentGroup][s].endPosition = playerState.endPosition;
+            m_tempStates[m_currentGroup][s].playbackSpeed = playerState.playbackSpeed;
+            m_tempStates[m_currentGroup][s].isValid = playerState.isValid;
+            m_tempStates[m_currentGroup][s].hasEndPosition = playerState.hasEndPosition;
+            m_tempStates[m_currentGroup][s].previewImage = playerState.previewImage;
+        }
+    }
+    
+    // Now switch to the new group
+    // Check if we've already loaded this group in temp storage
+    bool groupAlreadyLoadedInTemp = false;
+    for (int s = 0; s < 12; s++) {
+        if (m_tempStates[index][s].isValid) {
+            groupAlreadyLoadedInTemp = true;
+            break;
+        }
+    }
+    
+    // If this group has been loaded before in this dialog session, restore from temp
+    // Otherwise load from file
+    if (groupAlreadyLoadedInTemp && index != m_initialGroup) {
+        qDebug() << "StatesEditorDialog: Restoring group" << (index + 1) << "from temp storage";
+        // Restore to player RAM from our temp storage
+        m_player->switchStateGroup(index); // This loads from file first
+        // Then overwrite with our temp data
         for (int s = 0; s < 12; s++) {
             LightweightVideoPlayer::PlaybackState playerState;
-            playerState.startPosition = m_tempStates[m_currentGroup][s].startPosition;
-            playerState.endPosition = m_tempStates[m_currentGroup][s].endPosition;
-            playerState.playbackSpeed = m_tempStates[m_currentGroup][s].playbackSpeed;
-            playerState.isValid = m_tempStates[m_currentGroup][s].isValid;
-            playerState.hasEndPosition = m_tempStates[m_currentGroup][s].hasEndPosition;
-            playerState.previewImage = m_tempStates[m_currentGroup][s].previewImage;
+            playerState.startPosition = m_tempStates[index][s].startPosition;
+            playerState.endPosition = m_tempStates[index][s].endPosition;
+            playerState.playbackSpeed = m_tempStates[index][s].playbackSpeed;
+            playerState.isValid = m_tempStates[index][s].isValid;
+            playerState.hasEndPosition = m_tempStates[index][s].hasEndPosition;
+            playerState.previewImage = m_tempStates[index][s].previewImage;
             
-            m_player->setPlaybackState(m_currentGroup, s, playerState);
+            m_player->setPlaybackState(s, playerState);
         }
-        m_groupHasChanges[m_currentGroup] = false;
     }
-    
-    // Switch to the new group in the player (simulates pressing F1-F4)
-    m_player->switchStateGroup(index);
+    else {
+        // Load fresh from file via switchStateGroup
+        qDebug() << "StatesEditorDialog: Loading group" << (index + 1) << "from file";
+        m_player->switchStateGroup(index);
+        
+        // Load into temp storage
+        for (int s = 0; s < 12; s++) {
+            const auto& playerState = m_player->getPlaybackState(s);
+            m_tempStates[index][s].startPosition = playerState.startPosition;
+            m_tempStates[index][s].endPosition = playerState.endPosition;
+            m_tempStates[index][s].playbackSpeed = playerState.playbackSpeed;
+            m_tempStates[index][s].isValid = playerState.isValid;
+            m_tempStates[index][s].hasEndPosition = playerState.hasEndPosition;
+            m_tempStates[index][s].previewImage = playerState.previewImage;
+        }
+    }
     
     m_currentGroup = index;
-    
-    // Reload states from player for the new group
-    for (int s = 0; s < 12; s++) {
-        const auto& playerState = m_player->getPlaybackState(index, s);
-        m_tempStates[index][s].startPosition = playerState.startPosition;
-        m_tempStates[index][s].endPosition = playerState.endPosition;
-        m_tempStates[index][s].playbackSpeed = playerState.playbackSpeed;
-        m_tempStates[index][s].isValid = playerState.isValid;
-        m_tempStates[index][s].hasEndPosition = playerState.hasEndPosition;
-        m_tempStates[index][s].previewImage = playerState.previewImage;
-    }
-    
     populateStateList(index);
 }
 
@@ -424,32 +495,28 @@ bool StatesEditorDialog::checkUnsavedChanges(int fromGroup)
 
 void StatesEditorDialog::saveChangesToPlayer()
 {
-    if (!m_player) {
-        qDebug() << "StatesEditorDialog: No player reference";
-        return;
-    }
-    
-    // Copy modified states back to player
-    for (int g = 0; g < 4; g++) {
-        for (int s = 0; s < 12; s++) {
-            LightweightVideoPlayer::PlaybackState playerState;
-            playerState.startPosition = m_tempStates[g][s].startPosition;
-            playerState.endPosition = m_tempStates[g][s].endPosition;
-            playerState.playbackSpeed = m_tempStates[g][s].playbackSpeed;
-            playerState.isValid = m_tempStates[g][s].isValid;
-            playerState.hasEndPosition = m_tempStates[g][s].hasEndPosition;
-            playerState.previewImage = m_tempStates[g][s].previewImage;
-            
-            m_player->setPlaybackState(g, s, playerState);
-        }
-    }
-    
-    // Mark all groups as saved
-    for (int i = 0; i < 4; i++) {
-        m_groupHasChanges[i] = false;
-    }
-    
-    qDebug() << "StatesEditorDialog: Saved all changes to player";
+if (!m_player) {
+qDebug() << "StatesEditorDialog: No player reference";
+return;
+}
+
+    // Copy modified states from current group back to player
+for (int s = 0; s < 12; s++) {
+LightweightVideoPlayer::PlaybackState playerState;
+playerState.startPosition = m_tempStates[m_currentGroup][s].startPosition;
+playerState.endPosition = m_tempStates[m_currentGroup][s].endPosition;
+playerState.playbackSpeed = m_tempStates[m_currentGroup][s].playbackSpeed;
+playerState.isValid = m_tempStates[m_currentGroup][s].isValid;
+playerState.hasEndPosition = m_tempStates[m_currentGroup][s].hasEndPosition;
+playerState.previewImage = m_tempStates[m_currentGroup][s].previewImage;
+
+m_player->setPlaybackState(s, playerState);
+}
+
+// Mark current group as saved
+m_groupHasChanges[m_currentGroup] = false;
+
+qDebug() << "StatesEditorDialog: Saved changes for group" << (m_currentGroup + 1) << "to player";
 }
 
 void StatesEditorDialog::onSaveClicked()
@@ -472,7 +539,7 @@ void StatesEditorDialog::onSaveClicked()
             playerState.hasEndPosition = m_tempStates[m_currentGroup][s].hasEndPosition;
             playerState.previewImage = m_tempStates[m_currentGroup][s].previewImage;
             
-            m_player->setPlaybackState(m_currentGroup, s, playerState);
+            m_player->setPlaybackState(s, playerState);
         }
         m_groupHasChanges[m_currentGroup] = false;
     }
@@ -488,19 +555,41 @@ void StatesEditorDialog::onCancelClicked()
 {
     qDebug() << "StatesEditorDialog: Close clicked";
     
-    // Apply any pending changes to player memory before closing
+    // Check if current group has unsaved changes
     if (m_player && m_groupHasChanges[m_currentGroup]) {
-        for (int s = 0; s < 12; s++) {
-            LightweightVideoPlayer::PlaybackState playerState;
-            playerState.startPosition = m_tempStates[m_currentGroup][s].startPosition;
-            playerState.endPosition = m_tempStates[m_currentGroup][s].endPosition;
-            playerState.playbackSpeed = m_tempStates[m_currentGroup][s].playbackSpeed;
-            playerState.isValid = m_tempStates[m_currentGroup][s].isValid;
-            playerState.hasEndPosition = m_tempStates[m_currentGroup][s].hasEndPosition;
-            playerState.previewImage = m_tempStates[m_currentGroup][s].previewImage;
-            
-            m_player->setPlaybackState(m_currentGroup, s, playerState);
+        QMessageBox msgBox(this);
+        msgBox.setWindowTitle(tr("Unsaved Changes"));
+        msgBox.setText(tr("Group %1 has unsaved changes.").arg(m_currentGroup + 1));
+        msgBox.setInformativeText(tr("Do you want to save these changes before closing?"));
+        
+        QPushButton* saveButton = msgBox.addButton(tr("Save to RAM"), QMessageBox::AcceptRole);
+        QPushButton* discardButton = msgBox.addButton(tr("Discard Changes"), QMessageBox::DestructiveRole);
+        QPushButton* cancelButton = msgBox.addButton(tr("Cancel"), QMessageBox::RejectRole);
+        
+        msgBox.setDefaultButton(saveButton);
+        msgBox.exec();
+        
+        if (msgBox.clickedButton() == cancelButton) {
+            // User cancelled - don't close
+            qDebug() << "StatesEditorDialog: User cancelled close";
+            return;
         }
+        else if (msgBox.clickedButton() == saveButton) {
+            // Save changes to player memory
+            qDebug() << "StatesEditorDialog: Saving changes to RAM before closing";
+            for (int s = 0; s < 12; s++) {
+                LightweightVideoPlayer::PlaybackState playerState;
+                playerState.startPosition = m_tempStates[m_currentGroup][s].startPosition;
+                playerState.endPosition = m_tempStates[m_currentGroup][s].endPosition;
+                playerState.playbackSpeed = m_tempStates[m_currentGroup][s].playbackSpeed;
+                playerState.isValid = m_tempStates[m_currentGroup][s].isValid;
+                playerState.hasEndPosition = m_tempStates[m_currentGroup][s].hasEndPosition;
+                playerState.previewImage = m_tempStates[m_currentGroup][s].previewImage;
+                
+                m_player->setPlaybackState(s, playerState);
+            }
+        }
+        // If discard was clicked, just proceed to close without saving
     }
     
     accept();
