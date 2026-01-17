@@ -15,6 +15,8 @@
 #include <QBuffer>
 #include <QEventLoop>
 #include <QTimer>
+#include <QCoreApplication>
+#include <QDir>
 
 // Custom clickable slider class for seeking in video
 class LightweightVideoPlayer::ClickableSlider : public QSlider
@@ -1828,10 +1830,27 @@ QString LightweightVideoPlayer::getStatesFilePath(int groupIndex) const
         return QString();
     }
     
-    QFileInfo fileInfo(m_currentVideoPath);
-    QString basePath = fileInfo.absolutePath() + "/0state_" + fileInfo.completeBaseName();
+    // Get the application directory
+    QString appDir = QCoreApplication::applicationDirPath();
     
-    return basePath + QString(".statesG%1").arg(groupIndex + 1);
+    // Create savedstates folder path
+    QString statesDir = appDir + "/savedstates";
+    
+    // Create the directory if it doesn't exist
+    QDir dir;
+    if (!dir.exists(statesDir)) {
+        dir.mkpath(statesDir);
+        qDebug() << "LightweightVideoPlayer: Created savedstates directory:" << statesDir;
+    }
+    
+    // Get just the video filename (without path)
+    QFileInfo fileInfo(m_currentVideoPath);
+    QString videoFileName = fileInfo.completeBaseName();
+    
+    // Build the state file path: savedstates/[videoname].statesG[1-4]
+    QString filePath = statesDir + "/" + videoFileName + QString(".statesG%1").arg(groupIndex + 1);
+    
+    return filePath;
 }
 
 int LightweightVideoPlayer::findFirstValidLoop() const
