@@ -642,7 +642,11 @@ void VP_VLCPlayer::handleVLCEvent(const libvlc_event_t* event, void* userData)
         case libvlc_MediaPlayerEndReached:
             qDebug() << "VP_VLCPlayer: Media end reached";
             QMetaObject::invokeMethod(player, [player]() {
-                player->setState(PlayerState::Stopped);
+                // Reset position to beginning
+                libvlc_media_player_set_time(player->m_mediaPlayer, 0);
+                // Pause instead of stop so play works immediately
+                libvlc_media_player_set_pause(player->m_mediaPlayer, 1);
+                player->setState(PlayerState::Paused);
                 player->m_positionTimer->stop();
                 emit player->finished();
             }, Qt::QueuedConnection);

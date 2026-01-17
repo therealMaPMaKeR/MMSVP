@@ -1259,6 +1259,11 @@ void LightweightVideoPlayer::openStatesEditor()
         return;
     }
     
+    // Auto-pause playback when opening the editor
+    if (m_mediaPlayer && m_mediaPlayer->isPlaying()) {
+        pause();
+    }
+    
     // NOTE: States are already in RAM (m_playbackStates) - no need to save
     // The current group in RAM is always up-to-date with any Ctrl+1-9 changes
     // The dialog will load directly from this RAM state
