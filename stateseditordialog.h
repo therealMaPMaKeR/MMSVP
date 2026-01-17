@@ -37,6 +37,7 @@ private slots:
     void onStateItemDoubleClicked(QListWidgetItem* item);
     void onStateItemRightClicked(const QPoint& pos);
     void onSaveClicked();
+    void onCopyToClicked();
     void onCancelClicked();
 
 private:
@@ -59,6 +60,7 @@ private:
     QTabWidget* m_tabWidget;
     QListWidget* m_stateLists[4];  // One list per group
     QPushButton* m_saveButton;
+    QPushButton* m_copyToButton;
     QPushButton* m_cancelButton;
     QLabel* m_instructionLabel;
     

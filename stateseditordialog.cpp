@@ -16,6 +16,7 @@ StatesEditorDialog::StatesEditorDialog(LightweightVideoPlayer* player, QWidget *
     , m_player(player)
     , m_tabWidget(nullptr)
     , m_saveButton(nullptr)
+    , m_copyToButton(nullptr)
     , m_cancelButton(nullptr)
     , m_instructionLabel(nullptr)
     , m_currentGroup(0)
@@ -96,6 +97,11 @@ void StatesEditorDialog::setupUI()
     m_saveButton->setToolTip(tr("Save current group to file (like Ctrl+F1-F4)"));
     connect(m_saveButton, &QPushButton::clicked, this, &StatesEditorDialog::onSaveClicked);
     buttonLayout->addWidget(m_saveButton);
+    
+    m_copyToButton = new QPushButton(tr("Copy to:"), this);
+    m_copyToButton->setToolTip(tr("Copy current group to another group"));
+    connect(m_copyToButton, &QPushButton::clicked, this, &StatesEditorDialog::onCopyToClicked);
+    buttonLayout->addWidget(m_copyToButton);
     
     m_cancelButton = new QPushButton(tr("Close"), this);
     m_cancelButton->setDefault(true);
@@ -582,6 +588,135 @@ void StatesEditorDialog::onSaveClicked()
     
     QMessageBox::information(this, tr("Saved"), 
                            tr("Group %1 has been saved to file.").arg(m_currentGroup + 1));
+}
+
+void StatesEditorDialog::onCopyToClicked()
+{
+    qDebug() << "StatesEditorDialog: Copy to clicked";
+    
+    if (!m_player) {
+        QMessageBox::warning(this, tr("Error"), tr("No player reference."));
+        return;
+    }
+    
+    // Create a dialog to select target group
+    QDialog selectDialog(this);
+    selectDialog.setWindowTitle(tr("Copy Group %1").arg(m_currentGroup + 1));
+    
+    QVBoxLayout* layout = new QVBoxLayout(&selectDialog);
+    
+    QLabel* label = new QLabel(tr("Select which group to overwrite with Group %1:").arg(m_currentGroup + 1), &selectDialog);
+    label->setWordWrap(true);
+    layout->addWidget(label);
+    
+    // Create buttons for each group (excluding current)
+    QHBoxLayout* buttonLayout = new QHBoxLayout();
+    int targetGroup = -1;
+    
+    for (int i = 0; i < 4; i++) {
+        if (i == m_currentGroup) {
+            continue; // Skip current group
+        }
+        
+        QPushButton* groupButton = new QPushButton(tr("Group %1").arg(i + 1), &selectDialog);
+        connect(groupButton, &QPushButton::clicked, [&selectDialog, i, &targetGroup]() {
+            targetGroup = i;
+            selectDialog.accept();
+        });
+        buttonLayout->addWidget(groupButton);
+    }
+    
+    layout->addLayout(buttonLayout);
+    
+    // Add cancel button
+    QHBoxLayout* cancelLayout = new QHBoxLayout();
+    cancelLayout->addStretch();
+    QPushButton* cancelButton = new QPushButton(tr("Cancel"), &selectDialog);
+    connect(cancelButton, &QPushButton::clicked, &selectDialog, &QDialog::reject);
+    cancelLayout->addWidget(cancelButton);
+    
+    layout->addLayout(cancelLayout);
+    
+    selectDialog.setLayout(layout);
+    selectDialog.resize(400, 150);
+    
+    // Show selection dialog
+    if (selectDialog.exec() == QDialog::Rejected || targetGroup < 0) {
+        qDebug() << "StatesEditorDialog: Copy cancelled";
+        return;
+    }
+    
+    qDebug() << "StatesEditorDialog: Target group selected:" << (targetGroup + 1);
+    
+    // Show confirmation dialog
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this,
+        tr("Confirm Copy"),
+        tr("Overwrite Group %1 with Group %2?\n\nThis will replace all states in Group %1 with the states from Group %2.")
+            .arg(targetGroup + 1).arg(m_currentGroup + 1),
+        QMessageBox::Yes | QMessageBox::No
+    );
+    
+    if (reply != QMessageBox::Yes) {
+        qDebug() << "StatesEditorDialog: Copy confirmation declined";
+        return;
+    }
+    
+    // Copy all states from current group to target group in temp storage
+    for (int s = 0; s < 12; s++) {
+        m_tempStates[targetGroup][s] = m_tempStates[m_currentGroup][s];
+    }
+    
+    // Mark target group as visited since we modified it
+    m_groupVisited[targetGroup] = true;
+    
+    // Save target group to player memory and then to file
+    // First switch to target group
+    m_player->switchStateGroup(targetGroup);
+    
+    // Apply copied data to player memory
+    for (int s = 0; s < 12; s++) {
+        LightweightVideoPlayer::PlaybackState playerState;
+        playerState.startPosition = m_tempStates[targetGroup][s].startPosition;
+        playerState.endPosition = m_tempStates[targetGroup][s].endPosition;
+        playerState.playbackSpeed = m_tempStates[targetGroup][s].playbackSpeed;
+        playerState.isValid = m_tempStates[targetGroup][s].isValid;
+        playerState.hasEndPosition = m_tempStates[targetGroup][s].hasEndPosition;
+        playerState.previewImage = m_tempStates[targetGroup][s].previewImage;
+        
+        m_player->setPlaybackState(s, playerState);
+    }
+    
+    // Save target group to file
+    m_player->saveStateGroup(targetGroup);
+    
+    // Switch back to original group
+    m_player->switchStateGroup(m_currentGroup);
+    
+    // Restore current group's data to player memory
+    for (int s = 0; s < 12; s++) {
+        LightweightVideoPlayer::PlaybackState playerState;
+        playerState.startPosition = m_tempStates[m_currentGroup][s].startPosition;
+        playerState.endPosition = m_tempStates[m_currentGroup][s].endPosition;
+        playerState.playbackSpeed = m_tempStates[m_currentGroup][s].playbackSpeed;
+        playerState.isValid = m_tempStates[m_currentGroup][s].isValid;
+        playerState.hasEndPosition = m_tempStates[m_currentGroup][s].hasEndPosition;
+        playerState.previewImage = m_tempStates[m_currentGroup][s].previewImage;
+        
+        m_player->setPlaybackState(s, playerState);
+    }
+    
+    qDebug() << "StatesEditorDialog: Successfully copied Group" << (m_currentGroup + 1) 
+             << "to Group" << (targetGroup + 1);
+    
+    QMessageBox::information(this, tr("Copy Complete"),
+                           tr("Group %1 has been copied to Group %2 and saved to file.")
+                           .arg(m_currentGroup + 1).arg(targetGroup + 1));
+    
+    // If the target group tab is currently visible, refresh it
+    if (m_tabWidget->currentIndex() == targetGroup) {
+        populateStateList(targetGroup);
+    }
 }
 
 void StatesEditorDialog::onCancelClicked()
