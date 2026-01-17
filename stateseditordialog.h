@@ -42,10 +42,10 @@ private slots:
 private:
     void setupUI();
     void loadStatesFromPlayer();
+    void loadGroupFromDisk(int groupIndex);
+    bool compareGroupWithDisk(int groupIndex) const;
     void populateStateList(int groupIndex);
     void showEditDialog(int groupIndex, int stateIndex);
-    bool checkUnsavedChanges(int fromGroup);
-    void saveChangesToPlayer();
     void deleteState(int groupIndex, int stateIndex);
     void refreshPreview(int groupIndex, int stateIndex);
     QString formatTime(qint64 milliseconds) const;
@@ -78,8 +78,8 @@ private:
     
     TempStateStorage m_tempStates[4][12];  // 4 groups x 12 states
     
-    // Track changes
-    bool m_groupHasChanges[4];
+    // Track which groups have been visited in this dialog session
+    bool m_groupVisited[4];
     int m_currentGroup;
     int m_initialGroup;
 };
